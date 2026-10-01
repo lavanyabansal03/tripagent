@@ -1,0 +1,10 @@
+# Replace each @TODO-... placeholder with the teammate's real GitHub username (e.g. @octocat).
+# GitHub will then auto-request that person's review on PRs touching their folder.
+
+/backend/app/api/         @TODO-tools-eng
+/backend/app/agents/      @TODO-preferences-eng @TODO-agent-graph-eng
+/backend/app/graph/       @TODO-agent-graph-eng
+/backend/app/tools/       @TODO-tools-eng
+/backend/app/validation/  @TODO-validation-eng
+/backend/app/models/      @TODO-validation-eng
+/frontend/                @TODO-frontend-maps-eng

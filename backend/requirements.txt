@@ -1,0 +1,12 @@
+fastapi>=0.142
+uvicorn[standard]>=0.54
+pydantic>=2.13
+pydantic-settings>=2.15
+python-dotenv>=1.2
+sqlalchemy>=2.1
+httpx>=0.28
+langgraph>=1.2
+langchain-google-genai>=4.4
+google-genai>=2.27
+pytest>=9.1
+ruff>=0.16
