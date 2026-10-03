@@ -59,6 +59,20 @@ npm run dev
 
 Open http://localhost:5173. It should say **Backend: connected** while the backend is running.
 
+## LangGraph learning demo
+
+The frontend can start a trip with a destination and optional dates. If dates are missing, the graph
+pauses and asks a question; submit the answer to continue. The run shows its step-by-step log and
+sample places. The API is also available in `/docs`:
+
+- `POST /api/trips/plan` starts a run.
+- `POST /api/trips/{thread_id}/answer` resumes a run that is waiting for dates.
+
+The date question is limited to two attempts. Place search and saving each retry up to three times,
+then stop with an explanation. The separate teaching example is `app.graph.retry_example.run_retry_example()`.
+Search results and graph checkpoints are demo-only/in-memory; no external place service or durable
+database is connected yet.
+
 ## Run tests
 ```bash
 # Backend (from backend/, with the venv active)
