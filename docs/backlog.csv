@@ -1,0 +1,40 @@
+Title,Story ID,Sprint,Priority,Points,Owners,Requirement refs,Epic,Status
+"Agree MVP scope, roles and demo city (project package + kickoff)",S0-01,Done,P0,2,"Product Owner + all","PRD","E0 Inception",Done
+"Walk through the agent graph and agree data contracts at kickoff",S0-02,Done,P0,3,"All","ARCH 3-6","E0 Inception",Done
+"Repo skeleton, CI, PR template, CODEOWNERS, .env template",S0-08,Done,P0,2,"Tech Lead","TEST 10","E8 Delivery",Done
+"Trip form (with screen sketches) -> POST /api/trips -> stored trip (vertical slice)",US-01,Sprint 1,P0,5,"Frontend & Maps Eng. 2 UI, Tools Eng. 2 API, Validation Eng. 1 model","FR-01","E1 Setup",Backlog
+"Free-text ""Tell us more"" extraction with Gemini + provenance labels; 10-example answer key",US-17,Sprint 1,P0,5,"Preferences Eng. 3 agent, Frontend & Maps Eng. 1 UI, Validation Eng. 1 tests","FR-02, FR-33","E1 Setup",Backlog
+"Pydantic models from docs/contracts.md + validators v1: overlap, budget (with tests)",V-01,Sprint 1,P0,5,"Validation Eng. 4, Agent Graph Eng. 1","FR-07, FR-10","E4 Validation",Backlog
+"Practice loop that stops after 3 tries, then graph v1: intake -> mock discovery -> persist, with ExecutionEvents",G-01,Sprint 1,P0,3,"Agent Graph Eng.","FR-20, FR-21","E5 Agent graph",Backlog
+"Tool interfaces + mock adapters + fixtures for the demo city",T-01,Sprint 1,P0,3,"Tools Eng.","FR-55","E2 Discovery",Backlog
+"Spike: Mapbox + Foursquare fill rates for 30 places, cost per run, licence check (ADR-003)",S0-05,Sprint 1,P0,2,"Tools Eng. 1, Preferences Eng. 1","ADR-003","E2 Discovery",Backlog
+"Hello-world deployment + /api/health + deploy on merge",D-01,Sprint 1,P0,3,"Frontend & Maps Eng. 2, Tools Eng. 1","FR-54","E8 Delivery",Backlog
+"Discovery Agent L2: Foursquare + Mapbox adapters, merge/dedupe, Premium-call budget, coverage report",US-04,Sprint 2,P0,5,"Tools Eng. 3, Preferences Eng. 2","FR-03, FR-56-58, L2","E2 Discovery",Backlog
+"Experience typing, local/tourist heuristic + ratio, cost-range table",US-18,Sprint 2,P0,3,"Preferences Eng. 2, Validation Eng. 1","FR-10, FR-35, FR-36","E2 Discovery",Backlog
+"Travel matrix per mode, day clustering, simple nearest-neighbour ordering",US-23/24,Sprint 2,P0,5,"Tools Eng. 3, Agent Graph Eng. 2","FR-45-47","E6 Maps",Backlog
+"Planner Agent + deterministic scheduler",US-03,Sprint 2,P0,5,"Agent Graph Eng. 4, Preferences Eng. 1","FR-06","E3 Itinerary",Backlog
+"Validators v2: opening hours, travel time, avoid list, diversity warning",V-02,Sprint 2,P0,3,"Validation Eng.","FR-08, FR-09, FR-11, FR-37","E4 Validation",Backlog
+"Plan-Validate-Repair loop L3 with cap, stall check, INFEASIBLE explanation",L3-01,Sprint 2,P0,3,"Agent Graph Eng. 2, Validation Eng. 1","FR-16, FR-17","E5 Agent graph",Backlog
+"Itinerary view + map markers, routes, per-leg times",US-07,Sprint 2,P0,5,"Frontend & Maps Eng. 4, Tools Eng. 1","FR-18","E7 UI",Backlog
+"Backup Agent: purpose tags + 1 validated backup per priority activity",US-21,Sprint 3,P0,3,"Preferences Eng. 2, Tools Eng. 1","FR-40, FR-41","E5 Agent graph",Backlog
+"Change Interpreter + POST /api/trips/{id}/changes + ChangeEvent validation",US-13-15a,Sprint 3,P0,5,"Preferences Eng. 2, Tools Eng. 2, Frontend & Maps Eng. 1","FR-25, FR-32","E5 Agent graph",Backlog
+"Impact Analyzer (affected set) for budget, time, mode and closure",FR-25b,Sprint 3,P0,3,"Validation Eng. 2, Agent Graph Eng. 1","FR-25","E5 Agent graph",Backlog
+"Repair Agent with backup cascade L5, nearby search, purpose-preserving choice",US-22,Sprint 3,P0,8,"Agent Graph Eng. 3, Tools Eng. 2, Preferences Eng. 2, Validation Eng. 1","FR-42-44, FR-48","E5 Agent graph",Backlog
+"Versioning, ReplanEvent diff, Explainer Agent (template fallback first)",US-16,Sprint 3,P0,3,"Agent Graph Eng. 1, Preferences Eng. 2","FR-31, FR-52","E5 Agent graph",Backlog
+"Adjust-trip dialog, change summary list, changed legs highlighted on map",FR-51,Sprint 3,P0,3,"Frontend & Maps Eng. 3","FR-31, FR-51","E7 UI",Backlog
+"Scenario benchmark: S1-S6 automated with metrics report",S-01,Sprint 3,P0,3,"Validation Eng. 2, all 1","TEST 6","E8 Delivery",Backlog
+"Retry/fallback L6 and caching; confirm DEMO_MODE covers every tool",R-01,Sprint 4,P0,3,"Tools Eng. 2, Agent Graph Eng. 1","FR-22, FR-55","E8 Delivery",Backlog
+"Scenarios S7-S10 + one E2E flow (Playwright)",R-02,Sprint 4,P0,2,"Validation Eng. 1, Frontend & Maps Eng. 1","TEST 6, 8","E8 Delivery",Backlog
+"Accessibility and UX copy pass",R-03,Sprint 4,P0,2,"Frontend & Maps Eng. 2, Preferences Eng. 1","DESIGN","E7 UI",Backlog
+"Gemini rate-limit handling, token caps, quick performance check",R-04,Sprint 4,P0,2,"Agent Graph Eng. 2","NFR-03, NFR-13","E8 Delivery",Backlog
+"README, runbook, API docs, architecture diagram",R-05,Sprint 4,P0,2,"All (Validation Eng. coordinates)","DOCS","E8 Delivery",Backlog
+"Demo script + three clean rehearsals on the public URL",R-06,Sprint 4,P0,2,"All (Product Owner reviews)","PRD 3.6","E8 Delivery",Backlog
+"Clarification loop L1 (max 2 rounds) + questions UI",FR-34,Sprint 1,P0,3,"Agent Graph Eng. 2, Frontend & Maps Eng. 1","FR-34, L1","E1 Setup",Backlog
+"Undo to previous version",US-29,Stretch,P1,2,"Frontend & Maps Eng. 1, Agent Graph Eng. 1","FR-52","E7 UI",Backlog
+"Approval before major changes (L7)",FR-53,Stretch,P1,3,"Agent Graph Eng. 2, Frontend & Maps Eng. 1","FR-53","E5 Agent graph",Backlog
+"Trace panel (list of events for a run)",T-02,Stretch,P1,2,"Frontend & Maps Eng.","FR-20","E7 UI",Backlog
+"Diversity re-rank during candidate ranking",US-19,Stretch,P1,2,"Preferences Eng.","FR-37","E2 Discovery",Backlog
+"Spike: events provider and freshness labels",US-20a,Stretch,P1,2,"Tools Eng.","FR-38","E2 Discovery",Backlog
+"Current events with retrieved date + stale labels",US-20,Stretch,P1,5,"Tools Eng. 3, Frontend & Maps Eng. 2","FR-38, FR-39","E2 Discovery",Backlog
+"Along-route search (""coffee on the way"")",US-25,Stretch,P1,5,"Tools Eng. 3, Frontend & Maps Eng. 2","FR-49","E6 Maps",Backlog
+"Weather-triggered replanning",US-28,Stretch,P2,5,"Unassigned","US-28","E5 Agent graph",Backlog

@@ -1,7 +1,7 @@
 # TripAgent
 
 ## What this is
-TripAgent is an AI trip-planning web app: you describe a trip and it builds a day-by-day plan. It uses a Python/FastAPI backend with Google Gemini agents and a React frontend.
+TripAgent is an AI trip-planning web app: you describe a trip and it builds a day-by-day plan. It uses a Python/FastAPI backend with Google Gemini agents and a Svelte frontend.
 
 ## Prerequisites
 - [VS Code](https://code.visualstudio.com/) (accept the recommended extensions when prompted)
@@ -70,17 +70,19 @@ npm test
 ```
 
 ## Git rules
-- Make a new branch for every task: `git checkout -b <your-name>/<short-task-name>`
-- Open a Pull Request into `main`; it needs **1 review** and passing CI before merging.
+- Make a new branch for every task: `git checkout -b feature/<story-id>-short-name` (for example `feature/US-01-trip-form`)
+- Open a Pull Request into `main`; it needs **1 review** and passing CI before merging. Changes to shared models, graph edges or prompts need **2 reviews**.
 - **Never commit `.env`** or any real API key.
 
 ## Folder owners
 | Folder | Owner |
 |---|---|
-| `backend/app/api/` | Tools Eng. |
-| `backend/app/agents/` | Preferences Eng. + Agent Graph Eng. |
-| `backend/app/graph/` | Agent Graph Eng. |
-| `backend/app/tools/` | Tools Eng. |
-| `backend/app/validation/` | Validation Eng. |
-| `backend/app/models/` | Validation Eng. (shared data models) |
-| `frontend/` | Frontend & Maps Eng. |
+| `backend/app/api/` | Tools Eng. (Nitin) |
+| `backend/app/agents/` | Preferences Eng. (Kaleb) + Agent Graph Eng. (Sathwika) |
+| `backend/app/graph/` | Agent Graph Eng. (Sathwika) |
+| `backend/app/tools/` | Tools Eng. (Nitin) |
+| `backend/app/validation/` | Validation Eng. (Harshita) |
+| `backend/app/models/` | Validation Eng. (Harshita) (shared data models) |
+| `frontend/` | Frontend & Maps Eng. (Yahya) |
+
+Project mission, roadmap and tech stack: [constitution/](constitution/README.md).
