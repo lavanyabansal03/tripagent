@@ -3,6 +3,7 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.trips import router as trips_router
 from app.config import settings
 
 app = FastAPI(title="TripAgent API")
@@ -26,3 +27,4 @@ def health() -> dict:
 
 
 app.include_router(router)
+app.include_router(trips_router, prefix="/api")
