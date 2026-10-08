@@ -43,13 +43,15 @@ In TripAgent the word "agent" means a graph node that uses an LLM to make a deci
 | A2 | Discovery Agent | LLM tool-caller | Plans search queries across experience types (tourist, local, hidden, food, nature, culture, nightlife, free, events) and calls search tools until coverage targets are met. | Tools Eng. |
 | D1 | Ranker and Diversifier | Deterministic | Scores candidates (preference match, travel time, cost, local/tourist fit, freshness) and applies a diversity re-rank so days are not repetitive. | Preferences Eng. |
 | A3 | Itinerary Planner Agent | Hybrid | Deterministic geographic clustering assigns candidates to days; the LLM proposes an ordering and pacing per day; a deterministic scheduler assigns exact times using the travel matrix. | Agent Graph Eng. |
-| A4 | Backup Agent | Hybrid | For each priority activity, tags its purpose (for example "food + culture") and pre-computes two validated, purpose-preserving alternatives. | Tools Eng. + Preferences Eng. |
+| A4 | Backup Agent | Hybrid | For each priority activity, tags its purpose (for example "food + culture") and pre-computes two validated, purpose-preserving alternatives. | Validation Eng. + Tools Eng. |
 | D2 | Validator | Deterministic | Runs schedule, hours, travel-time, budget, preference, diversity and freshness checks. Never an LLM. | Validation Eng. |
 | D3 | Router (Supervisor) | Deterministic | LangGraph conditional edges that read validation results and counters to choose the next node. Kept deterministic so control flow is testable. | Agent Graph Eng. |
 | A5 | Change Interpreter Agent | LLM + schema | Turns "I'm 90 minutes late" or "budget is now $300" into a typed ChangeEvent. Asks the user when the change is ambiguous. | Preferences Eng. |
 | D4 | Impact Analyzer | Deterministic | Given a ChangeEvent and the current itinerary, computes the affected set: activities, time windows and routes that are now invalid or at risk. | Validation Eng. |
 | A6 | Repair Agent (Replanner) | Hybrid | Tries stored backups first, then targeted tool search (nearby, along route, cheaper, indoor). The LLM chooses among only the feasible candidates, favouring purpose preservation and minimal change. | Agent Graph Eng. |
-| A7 | Explainer Agent | LLM (grounded) | Writes the change summary and reasons from the structured ReplanEvent diff only. Cannot introduce facts not in the diff. | Frontend & Maps Eng. + Preferences Eng. |
+| A7 | Explainer Agent | LLM (grounded) | Writes the change summary and reasons from the structured ReplanEvent diff only. Cannot introduce facts not in the diff. | Frontend & Maps Eng. (Preferences Eng. helps) |
+
+Every engineer leads at least one LLM agent (agreed Oct 8, 2026): Preferences Eng. leads A1 and A5, Tools Eng. leads A2, Agent Graph Eng. leads A3 and A6, Validation Eng. leads A4, and Frontend & Maps Eng. leads A7. The first role in the Owner column is the lead.
 
 > **Why not one big "travel agent" prompt?** A single prompt cannot be unit-tested, cannot be forced to respect hard constraints and cannot be partially re-run. Splitting into small agents with typed inputs and outputs lets five people build in parallel against mocks, and lets the validator catch LLM mistakes before users see them.
 

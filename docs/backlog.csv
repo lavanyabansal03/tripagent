@@ -16,11 +16,11 @@ Title,Story ID,Sprint,Priority,Points,Owners,Requirement refs,Epic,Status
 "Validators v2: opening hours, travel time, avoid list, diversity warning",V-02,Sprint 2,P0,3,"Validation Eng.","FR-08, FR-09, FR-11, FR-37","E4 Validation",Backlog
 "Plan-Validate-Repair loop L3 with cap, stall check, INFEASIBLE explanation",L3-01,Sprint 2,P0,3,"Agent Graph Eng. 2, Validation Eng. 1","FR-16, FR-17","E5 Agent graph",Backlog
 "Itinerary view + map markers, routes, per-leg times",US-07,Sprint 2,P0,5,"Frontend & Maps Eng. 4, Tools Eng. 1","FR-18","E7 UI",Backlog
-"Backup Agent: purpose tags + 1 validated backup per priority activity",US-21,Sprint 3,P0,3,"Preferences Eng. 2, Tools Eng. 1","FR-40, FR-41","E5 Agent graph",Backlog
+"Backup Agent: purpose tags + 1 validated backup per priority activity",US-21,Sprint 3,P0,3,"Validation Eng. 2, Tools Eng. 1","FR-40, FR-41","E5 Agent graph",Backlog
 "Change Interpreter + POST /api/trips/{id}/changes + ChangeEvent validation",US-13-15a,Sprint 3,P0,5,"Preferences Eng. 2, Tools Eng. 2, Frontend & Maps Eng. 1","FR-25, FR-32","E5 Agent graph",Backlog
 "Impact Analyzer (affected set) for budget, time, mode and closure",FR-25b,Sprint 3,P0,3,"Validation Eng. 2, Agent Graph Eng. 1","FR-25","E5 Agent graph",Backlog
 "Repair Agent with backup cascade L5, nearby search, purpose-preserving choice",US-22,Sprint 3,P0,8,"Agent Graph Eng. 3, Tools Eng. 2, Preferences Eng. 2, Validation Eng. 1","FR-42-44, FR-48","E5 Agent graph",Backlog
-"Versioning, ReplanEvent diff, Explainer Agent (template fallback first)",US-16,Sprint 3,P0,3,"Agent Graph Eng. 1, Preferences Eng. 2","FR-31, FR-52","E5 Agent graph",Backlog
+"Versioning, ReplanEvent diff, Explainer Agent (template fallback first)",US-16,Sprint 3,P0,3,"Frontend & Maps Eng. 2, Agent Graph Eng. 1","FR-31, FR-52","E5 Agent graph",Backlog
 "Adjust-trip dialog, change summary list, changed legs highlighted on map",FR-51,Sprint 3,P0,3,"Frontend & Maps Eng. 3","FR-31, FR-51","E7 UI",Backlog
 "Scenario benchmark: S1-S6 automated with metrics report",S-01,Sprint 3,P0,3,"Validation Eng. 2, all 1","TEST 6","E8 Delivery",Backlog
 "Retry/fallback L6 and caching; confirm DEMO_MODE covers every tool",R-01,Sprint 4,P0,3,"Tools Eng. 2, Agent Graph Eng. 1","FR-22, FR-55","E8 Delivery",Backlog

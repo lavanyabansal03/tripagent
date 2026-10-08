@@ -30,11 +30,23 @@ Owners in this plan are written as role names, not people. At the Sprint 1 kicko
 
 | Role | Person | Home area | Also works on |
 |---|---|---|---|
-| Preferences Eng. | Kaleb | Intake, preferences, ranking, diversity, Explainer, golden sets | Backup purpose tags, UX copy |
-| Validation Eng. | Harshita | Models, validators, impact analysis, scenario benchmark | CI, property tests, docs |
+| Preferences Eng. | Kaleb | Intake, change interpretation, preferences, ranking, diversity, golden sets | Backup purpose tags, Explainer wording, UX copy |
+| Validation Eng. | Harshita | Models, validators, Backup Agent, impact analysis, scenario benchmark | CI, property tests, docs |
 | Agent Graph Eng. | Sathwika | LangGraph workflow, loops, planner/scheduler, repair | Performance, approval loop |
-| Tools Eng. | Nitin | FastAPI, tool adapters, maps/routing, events, fallback | Deployment, backup search |
-| Frontend & Maps Eng. | Yahya | Frontend, map UI, trace UI, deployment, E2E | Design system, accessibility |
+| Tools Eng. | Nitin | FastAPI, tool adapters, Discovery Agent, maps/routing, events, fallback | Deployment, backup search |
+| Frontend & Maps Eng. | Yahya | Frontend, map UI, trace UI, Explainer Agent, deployment, E2E | Design system, accessibility |
+
+**AI agent leads.** Every engineer leads at least one LLM agent (agreed Oct 8, 2026). "Lead" means they build it, test it and answer questions about it; others help.
+
+| Agent (see ARCH section 3) | Lead | Sprint |
+|---|---|---|
+| A1 Intake | Preferences Eng. (Kaleb) | 1 |
+| A2 Discovery | Tools Eng. (Nitin) | 2 |
+| A3 Itinerary Planner | Agent Graph Eng. (Sathwika) | 2 |
+| A4 Backup | Validation Eng. (Harshita) | 3 |
+| A5 Change Interpreter | Preferences Eng. (Kaleb) | 3 |
+| A6 Repair | Agent Graph Eng. (Sathwika) | 3 |
+| A7 Explainer | Frontend & Maps Eng. (Yahya) | 3 |
 
 ### 1.3 RACI for key activities
 
@@ -222,11 +234,11 @@ FR-34 moved from the stretch list into Sprint 1 (P0) because loop engineering is
 
 | Pri | ID | Item | Pts | Owners (points split) |
 |---|---|---|---|---|
-| P0 | US-21 | Backup Agent: purpose tags + 1 validated backup per priority activity | 3 | Preferences Eng. 2, Tools Eng. 1 |
+| P0 | US-21 | Backup Agent: purpose tags + 1 validated backup per priority activity | 3 | Validation Eng. 2, Tools Eng. 1 |
 | P0 | US-13-15a | Change Interpreter + POST /api/trips/{id}/changes + ChangeEvent validation | 5 | Preferences Eng. 2, Tools Eng. 2, Frontend & Maps Eng. 1 |
 | P0 | FR-25b | Impact Analyzer (affected set) for budget, time, mode and closure | 3 | Validation Eng. 2, Agent Graph Eng. 1 |
 | P0 | US-22 | Repair Agent with backup cascade L5, nearby search, purpose-preserving choice | 8 | Agent Graph Eng. 3, Tools Eng. 2, Preferences Eng. 2, Validation Eng. 1 |
-| P0 | US-16 | Versioning, ReplanEvent diff, Explainer Agent (template fallback first) | 3 | Agent Graph Eng. 1, Preferences Eng. 2 |
+| P0 | US-16 | Versioning, ReplanEvent diff, Explainer Agent (template fallback first) | 3 | Frontend & Maps Eng. 2, Agent Graph Eng. 1 |
 | P0 | FR-51 | Adjust-trip dialog, change summary list, changed legs highlighted on map | 3 | Frontend & Maps Eng. 3 |
 | P0 | S-01 | Scenario benchmark: S1-S6 automated with metrics report | 3 | Validation Eng. 2, all 1 |
 

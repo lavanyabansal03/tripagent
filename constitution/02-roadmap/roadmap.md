@@ -96,11 +96,11 @@ The `Status` column is filled in by comparing each task against the code. See th
 
 | ID | Task | Pts | Owners | Refs | Status |
 |---|---|---|---|---|---|
-| US-21 | Backup Agent: purpose tags + 1 validated backup per priority activity | 3 | Preferences 2, Tools 1 | FR-40, FR-41 | Not verified |
+| US-21 | Backup Agent: purpose tags + 1 validated backup per priority activity | 3 | Validation 2, Tools 1 | FR-40, FR-41 | Not verified |
 | US-13-15a | Change Interpreter + `POST /api/trips/{id}/changes` + ChangeEvent validation | 5 | Preferences 2, Tools 2, Frontend 1 | FR-25, FR-32 | Not verified |
 | FR-25b | Impact Analyzer (affected set) for budget, time, mode and closure | 3 | Validation 2, Agent Graph 1 | FR-25 | Not verified |
 | US-22 | Repair Agent with backup cascade (L5), nearby search, purpose-preserving choice | 8 | Agent Graph 3, Tools 2, Preferences 2, Validation 1 | FR-42-44, FR-48 | Not verified |
-| US-16 | Versioning, ReplanEvent diff, Explainer Agent (template fallback first) | 3 | Agent Graph 1, Preferences 2 | FR-31, FR-52 | Not verified |
+| US-16 | Versioning, ReplanEvent diff, Explainer Agent (template fallback first) | 3 | Frontend 2, Agent Graph 1 | FR-31, FR-52 | Not verified |
 | FR-51 | Adjust-trip dialog, change summary list, changed legs highlighted on map | 3 | Frontend 3 | FR-31, FR-51 | Not verified |
 | S-01 | Scenario benchmark: S1-S6 automated with metrics report | 3 | Validation 2, all 1 | TEST 6 | Not verified |
 
