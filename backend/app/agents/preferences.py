@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from google import genai
+#from google import genai
 
 from app.config import settings
 
