@@ -1,8 +1,9 @@
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+from app.config import MAX_FIND_ATTEMPTS
 from app.graph.retry_example import run_retry_example
-from app.graph.trip_planner import MAX_FIND_ATTEMPTS, build_trip_graph
+from app.graph.trip_planner import build_trip_graph
 
 
 def test_learning_loop_succeeds_before_three_tries():
@@ -30,15 +31,15 @@ def test_trip_graph_asks_for_dates_then_runs_in_order():
     waiting = graph.get_state(config).values
     assert waiting["status"] == "awaiting_input"
     assert waiting["question"]["fields"] == ["start_date", "end_date"]
-    assert waiting["logs"][0]["step"] == "read"
-    assert waiting["logs"][1]["step"] == "ask_question"
+    assert waiting["logs"][0]["node"] == "read"
+    assert waiting["logs"][1]["node"] == "ask_question"
 
     result = graph.invoke(
         Command(resume={"start_date": "2026-11-01", "end_date": "2026-11-05"}), config
     )
 
     assert result["status"] == "completed"
-    assert [entry["step"] for entry in result["logs"]] == [
+    assert [entry["node"] for entry in result["logs"]] == [
         "read",
         "ask_question",
         "answer",
@@ -60,7 +61,7 @@ def test_trip_graph_stops_after_two_unanswered_clarifications():
     result = graph.invoke(Command(resume={"start_date": None, "end_date": None}), config)
     assert result["status"] == "failed"
     assert "after two questions" in result["explanation"]
-    assert "find" not in [entry["step"] for entry in result["logs"]]
+    assert "find" not in [entry["node"] for entry in result["logs"]]
 
 
 def test_place_search_retries_but_never_more_than_three_times():
@@ -81,7 +82,10 @@ def test_place_search_retries_but_never_more_than_three_times():
 
     assert calls == 3
     assert result["status"] == "completed"
-    assert [log.get("attempt") for log in result["logs"] if log["step"] == "find"] == [1, 2, 3]
+    find_attempts = [
+        log["metadata"].get("attempt") for log in result["logs"] if log["node"] == "find"
+    ]
+    assert find_attempts == [1, 2, 3]
 
 
 def test_place_search_failure_explains_after_three_tries():

@@ -1,14 +1,15 @@
 """First TripAgent workflow: read, clarify, find sample places, and save."""
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, TypedDict
+from uuid import uuid4
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-MAX_CLARIFICATION_ATTEMPTS = 2
-MAX_FIND_ATTEMPTS = 3
+from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
 
 
 class TripState(TypedDict, total=False):
@@ -24,10 +25,23 @@ class TripState(TypedDict, total=False):
     explanation: str
     find_error: str
     save_error: str
+    run_id: str
 
 
 def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict[str, Any]]:
-    entry = {"step": step, "message": message, **details}
+    trip = state.get("trip", {})
+    entry = {
+        "id": str(uuid4()),
+        "trip_id": trip.get("trip_id", trip.get("id", "")),
+        "run_id": state.get("run_id", ""),
+        "node": step,
+        "type": "node",
+        "iteration": details.get("attempt", details.get("iteration", 1)),
+        "status": "failed" if "error" in details or step == "stop" else "ok",
+        "duration_ms": 0,
+        "metadata": {"message": message, **details},
+        "ts": datetime.now(UTC).isoformat(),
+    }
     return [*state.get("logs", []), entry]
 
 

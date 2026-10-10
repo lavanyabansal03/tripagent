@@ -1,13 +1,32 @@
-import react from '@vitejs/plugin-react'
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-// https://vite.dev/config/
+// Frontend & Maps Eng. — Vite + Svelte 5 + TS.
+// VITE_DEMO_MODE=true (default) makes every API call resolve against recorded
+// fixtures so the UI runs without the backend, matching FR-55.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [svelte()],
   server: {
-    // Forward /api requests to the FastAPI backend during development.
+    port: 5173,
     proxy: {
-      '/api': 'http://localhost:8000',
+      // With the real backend set VITE_DEMO_MODE=false and point this proxy at
+      // the FastAPI service.
+      '/api': {
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    css: false,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 })

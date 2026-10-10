@@ -1,7 +1,7 @@
 # TripAgent
 
 ## What this is
-TripAgent is an AI trip-planning web app: you describe a trip and it builds a day-by-day plan. It uses a Python/FastAPI backend with Google Gemini agents and a React frontend.
+TripAgent is an AI trip-planning web app: you describe a trip and it builds a day-by-day plan. It uses a Python/FastAPI backend with Google Gemini agents and a Svelte frontend.
 
 ## Prerequisites
 - [VS Code](https://code.visualstudio.com/) (accept the recommended extensions when prompted)
@@ -61,17 +61,19 @@ Open http://localhost:5173. It should say **Backend: connected** while the backe
 
 ## LangGraph learning demo
 
-The frontend can start a trip with a destination and optional dates. If dates are missing, the graph
-pauses and asks a question; submit the answer to continue. The run shows its step-by-step log and
-sample places. The API is also available in `/docs`:
+The API is available in `/docs` and follows the Svelte client's trip/run contract:
 
-- `POST /api/trips/plan` starts a run.
-- `POST /api/trips/{thread_id}/answer` resumes a run that is waiting for dates.
+- `POST /api/trips` creates a trip and returns `{trip, requirements, questions}`. Missing dates are
+	returned as typed clarification questions.
+- `POST /api/trips/{id}/answers` accepts `{ "answers": { ... } }` and returns updated requirements.
+- `POST /api/trips/{id}/plan` starts the graph and returns `{ "run_id": "..." }`.
+- `GET /api/runs/{run_id}` returns the run's polling status.
+- `GET /api/trips/{id}/trace` returns the run's `ExecutionEvent` records.
 
-The date question is limited to two attempts. Place search and saving each retry up to three times,
-then stop with an explanation. The separate teaching example is `app.graph.retry_example.run_retry_example()`.
-Search results and graph checkpoints are demo-only/in-memory; no external place service or durable
-database is connected yet.
+Place search and saving each retry up to three times, then stop with an explanation. Graph loop
+limits are configured in `backend/app/config.py`. The separate teaching example is
+`app.graph.retry_example.run_retry_example()`. Search results and graph checkpoints are
+demo-only/in-memory; no external place service or durable database is connected yet.
 
 ## Run tests
 ```bash
@@ -84,17 +86,19 @@ npm test
 ```
 
 ## Git rules
-- Make a new branch for every task: `git checkout -b <your-name>/<short-task-name>`
-- Open a Pull Request into `main`; it needs **1 review** and passing CI before merging.
+- Make a new branch for every task: `git checkout -b feature/<story-id>-short-name` (for example `feature/US-01-trip-form`)
+- Open a Pull Request into `main`; it needs **1 review** and passing CI before merging. Changes to shared models, graph edges or prompts need **2 reviews**.
 - **Never commit `.env`** or any real API key.
 
 ## Folder owners
 | Folder | Owner |
 |---|---|
-| `backend/app/api/` | Tools Eng. |
-| `backend/app/agents/` | Preferences Eng. + Agent Graph Eng. |
-| `backend/app/graph/` | Agent Graph Eng. |
-| `backend/app/tools/` | Tools Eng. |
-| `backend/app/validation/` | Validation Eng. |
-| `backend/app/models/` | Validation Eng. (shared data models) |
-| `frontend/` | Frontend & Maps Eng. |
+| `backend/app/api/` | Tools Eng. (Nitin) |
+| `backend/app/agents/` | Preferences Eng. (Kaleb) + Agent Graph Eng. (Sathwika) |
+| `backend/app/graph/` | Agent Graph Eng. (Sathwika) |
+| `backend/app/tools/` | Tools Eng. (Nitin) |
+| `backend/app/validation/` | Validation Eng. (Harshita) |
+| `backend/app/models/` | Validation Eng. (Harshita) (shared data models) |
+| `frontend/` | Frontend & Maps Eng. (Yahya) |
+
+Project mission, roadmap and tech stack: [constitution/](constitution/README.md).
