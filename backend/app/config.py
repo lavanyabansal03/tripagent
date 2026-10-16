@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     FOURSQUARE_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./tripagent.db"
     DEMO_MODE: bool = True
+    # Comma-separated browser origins allowed to call the API. Use "*" to allow
+    # any origin (the API has no cookies/auth, so credentials are then disabled).
+    CORS_ORIGINS: str = "http://localhost:5173"
 
 
 settings = Settings()
