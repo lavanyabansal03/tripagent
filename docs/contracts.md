@@ -1,321 +1,366 @@
 # Data Contracts
 
+> **Scope:** Shared data contracts for TripAgent, including trip preferences, provider-compatible place fields, workflow events, and validation rules. These contracts define the target data format for frontend and backend implementation.
+
 ## 1. Purpose
 
-This document defines the shared data structures used by the TripAgent frontend and backend.
+This document defines the shared data structures that TripAgent's frontend (TypeScript), backend (Python/Pydantic), preferences extraction, tools, and AI workflow exchange.
 
-The frontend uses TypeScript interfaces, while the backend uses Python Pydantic models. Both must follow the same data contracts to ensure information is exchanged consistently.
+It preserves the original contract's field names and models except where the team agreed to revise them. In particular, budget changes from one numeric field to a range and splurges; Place details reflect provider data availability and distinguish unknown values from confirmed ones.
 
-These contracts describe the structure, required fields, data types, and validation rules for trips, traveler preferences, places, activities, and validation results.
+## 2. Source of Truth and Conventions
 
-Any changes to shared data models must be communicated in the team chat and approved by two reviewers before merging.
-
-## 2. Source of Truth
-
-The current frontend data structures are defined in:
-
-`frontend/src/types/index.ts`
-
-The corresponding Python models will be implemented in:
-
-`backend/app/models/`
-
-The validation functions will be implemented in:
-
-`backend/app/validation/`
-
-Kaleb's preference extraction model is currently defined in:
-
-`backend/app/agents/preferences.py`
-
-The frontend and backend models must remain consistent. Any differences in field names or data types should be documented and resolved before integration.
+- **Canonical existing frontend types:** `frontend/src/types/index.ts`. This document defines the target changes to mirror into frontend and Python models.
+- **Pydantic implementation:** `backend/app/models/`.
+- **Validation code:** `backend/app/validation/`.
+- **Tests:** `backend/tests/`.
+- **Preferences extraction:** `backend/app/agents/preferences.py`.
+- JSON keys use `snake_case`.
+- Dates use `YYYY-MM-DD`, timestamps use ISO 8601, and scheduled activities must be interpreted in a consistent destination timezone.
+- Required fields are listed without **optional**.
+- `T | null` means the value may be `null`; **optional** means the key can be omitted.
+- Defined defaults apply when normalizing input.
+- Enums are case-sensitive.
+- `Provenance` = `explicit | inferred | default`.
+- `Severity` = `hard | soft | data-gap`.
+- Unknown external/provider values must never be converted to `0`, `false`, or an unverified claim.
+- If a check cannot be confirmed, return a `data-gap` result and display *Not confirmed*.
+- Shared data-format changes require two PR reviewers before merging.
 
 ## 3. Trip Data Model
 
 The Trip model stores basic information about a traveler's trip.
 
-Source: `frontend/src/types/index.ts`
-
-| Field | Type | Description |
+| Field | Type | Notes |
 |---|---|---|
-| id | string | Unique identifier for the trip |
-| destination | string | City or location the traveler plans to visit |
-| start_date | string | Starting date of the trip |
-| end_date | string | Ending date of the trip |
-| status | string (enum) | Current planning status of the trip |
-| current_version | number (integer) | Current version of the itinerary |
-| created_at | string | Date and time when the trip was created |
-
-### Allowed Trip Status Values
-
-The `status` field must contain one of the following values:
-
-- `draft`
-- `planning`
-- `planned`
-- `adapting`
-- `infeasible`
-- `error`
-
-### Example Trip
-
-```json
-{
-  "id": "T001",
-  "destination": "New York",
-  "start_date": "2026-10-12",
-  "end_date": "2026-10-15",
-  "status": "draft",
-  "current_version": 1,
-  "created_at": "2026-10-08T10:00:00"
-}
-```
+| `id` | string | Nonempty trip ID |
+| `destination` | string | Nonempty destination |
+| `start_date`, `end_date` | date string | Inclusive trip range; start <= end |
+| `status` | `draft \| planning \| planned \| adapting \| infeasible \| error` | Trip lifecycle |
+| `current_version` | integer | Nonnegative itinerary version |
+| `created_at` | ISO 8601 datetime string | Creation time |
 
 ### Validation Rules
 
-1. The trip ID must be a non-empty string.
-2. The destination must be provided.
-3. The start date must not be later than the end date.
-4. The status must match one of the allowed values.
-5. The current version must be a non-negative integer.
-6. Dates must use the ISO format (YYYY-MM-DD).
-7. The creation timestamp should use a consistent ISO 8601 datetime format.
+1. Trip ID and destination must be nonempty.
+2. Start date must not be later than end date.
+3. Status must match an allowed value.
+4. Current version must be nonnegative.
+5. Dates and timestamps must follow the specified formats.
 
 ## 4. TripRequirements Data Model
 
-The TripRequirements model stores the traveler's preferences and constraints. These requirements guide the AI when creating an itinerary and help the validation system determine whether the itinerary meets the user's needs.
+The TripRequirements model stores travel preferences and constraints.
 
-Source: `frontend/src/types/index.ts`
+The original single `budget: number | null` is replaced with budget ranges and splurges.
 
-| Field | Type | Description |
+| Field | Type | Default / Rules |
 |---|---|---|
-| trip_id | string | Identifies the trip |
-| version | number (integer) | Requirements version |
-| destination | string | Travel destination |
-| start_date | string | Trip starting date |
-| end_date | string | Trip ending date |
-| budget | number or null | Maximum budget specified by the traveler |
-| budget_strictness | string (enum) | Whether the budget is strict or flexible |
-| mode | string (enum) | Preferred transportation method |
-| pace | string (enum) | Preferred travel pace |
-| interests | string[] | Activities and experiences the traveler enjoys |
-| avoid | string[] | Activities and experiences the traveler wants to avoid |
-| tourist_local_ratio | number | Preference for tourist attractions versus local experiences |
-| max_travel_min | number | Maximum preferred travel time between activities |
-| daily_start | string | Preferred daily starting time |
-| daily_end | string | Preferred daily ending time |
-| dietary | string[] | Dietary requirements |
-| accessibility | string[] | Accessibility requirements |
-| free_text | string | Original travel preferences provided by the user |
-| provenance | Record<string, Provenance> | Indicates whether each preference was explicit, inferred, or a default |
+| `trip_id` | string | Required |
+| `version` | integer | Required, nonnegative |
+| `destination` | string | Required |
+| `start_date`, `end_date` | date string | Required; start <= end |
+| `budget_min` | number or null | Default `null`; >= 0 if provided |
+| `budget_max` | number or null | Default `null`; >= 0 and >= budget_min |
+| `budget_strictness` | `strict \| flexible \| none` | Default `flexible` |
+| `budget_level` | `cheap \| moderate \| expensive \| null` | Default `null` |
+| `must_do` | `MustDo[]` | Default `[]` |
+| `mode` | `walking \| transit \| driving \| cycling` | Transportation preference |
+| `pace` | `relaxed \| moderate \| packed` | Travel pace |
+| `interests` | string[] | Preferred activities |
+| `avoid` | string[] | Activities to avoid |
+| `tourist_local_ratio` | number | 0–100 |
+| `max_travel_min` | number | Nonnegative |
+| `daily_start`, `daily_end` | `HH:MM` string | Preferred daily schedule |
+| `dietary` | `DietaryPreference[]` | Default `[]` |
+| `accessibility` | `AccessibilityPreference[]` | Default `[]` |
+| `free_text` | string | Original user preferences |
+| `provenance` | `Record<string, Provenance>` | Preference source |
+| `travelers` | `Travelers` | Default `{adults: 1, children: 0, infants: 0}` |
+| `kid_friendly` | boolean | Derived from children/infants |
+| `energy` | `calm \| balanced \| adventurous` | Default `balanced` |
+| `safety_first` | boolean | Default `false` |
+| `medical_access` | `MedicalAccess` | Default `{required: false, max_minutes: 20}` |
+| `indoor_outdoor` | `indoor \| outdoor \| mix` | Default `mix` |
+| `weather_backup` | boolean | Default `true` |
 
-### Allowed Values
+### 4.1 Dietary Preferences
 
-- `budget_strictness`: `strict`, `flexible`
-- `mode`: `walking`, `transit`, `driving`, `cycling`
-- `pace`: `relaxed`, `moderate`, `packed`
-- `provenance`: `explicit`, `inferred`, `default`
+Allowed values:
 
-### Proposed Validation Rules
+- `vegetarian`
+- `vegan`
+- `halal`
+- `kosher`
+- `gluten_free`
+- `dairy_free`
+- `nut_allergy`
 
-1. The trip ID must be a non-empty string.
-2. The start date must not be later than the end date.
-3. The budget must be non-negative when provided.
-4. A null budget indicates that no numeric budget has been specified.
-5. Budget strictness must match an allowed value.
-6. The tourist-local ratio must be between 0 and 100.
-7. Maximum travel time must be non-negative.
-8. Daily start and end times must follow the `HH:MM` format.
-9. Transportation mode and travel pace must match their allowed values.
-10. Provenance values must be `explicit`, `inferred`, or `default`.
+Unknown dietary information must not be treated as confirmation that a restaurant meets the requirement.
 
-### Integration Note: Kaleb's Preferences Model
+### 4.2 Accessibility Preferences
 
-Kaleb's proposed preference extraction model differs from the frontend TripRequirements interface in two important ways:
+Allowed values:
 
-| Kaleb's Model | Frontend Model | Difference |
+- `wheelchair`
+- `step_free`
+- `limited_walking`
+- `visual`
+- `hearing`
+
+Missing accessibility information must be reported as unconfirmed.
+
+### 4.3 Travelers
+
+| Field | Type | Allowed Values | Default |
+|---|---|---|---|
+| `adults` | integer | 1–10 | 1 |
+| `children` | integer | 0–10 | 0 |
+| `infants` | integer | 0–5 | 0 |
+| `solo` | derived boolean | True when traveling alone | Derived |
+
+`solo` is derived as:
+
+`adults == 1 && children == 0 && infants == 0`
+
+### 4.4 MedicalAccess
+
+| Field | Type | Default |
 |---|---|---|
-| `budget: str \| None` | `budget: number \| null` | Kaleb extracts qualitative budgets such as "cheap", while the frontend expects numeric amounts |
-| `max_travel_minutes` | `max_travel_min` | Different field names |
+| `required` | boolean | false |
+| `max_minutes` | integer (5–60) | 20 |
 
-These differences must be resolved before integration.
+### 4.5 Budget Interpretation
 
-A qualitative budget such as "cheap" should not automatically be treated as a specific monetary amount without an agreed conversion rule or user clarification.
+1. `budget_min` and `budget_max` must be nonnegative when provided.
+2. `budget_min` must not exceed `budget_max`.
+3. `budget_strictness: none` disables budget-limit validation.
+4. `budget_level` represents qualitative preferences rather than numerical amounts.
+5. A request such as "cheap trip" must not automatically become a numeric budget.
+6. `budget_min` guides itinerary ranking and is not a failure threshold.
+7. Splurge activities are excluded from the regular budget calculation.
+8. Unknown costs must not be interpreted as zero.
 
-The shared TripRequirements contract retains the frontend field names for now. Any mapping from Kaleb's extracted preferences to TripRequirements requires team review.
+### 4.6 Safety Preferences
+
+The `safety_first` field is controlled by the traveler.
+
+The system must not infer gender, age, disability, or safety needs from a name or writing style.
+
+When enabled, planning may prefer:
+
+- Daylight activities.
+- Busy, well-reviewed locations.
+- Shorter walking distances after dark.
+- Less isolated routes.
+
+The system must not claim that a location is guaranteed safe.
+
+### 4.7 Weather and Indoor/Outdoor Preferences
+
+`indoor_outdoor` supports:
+
+- `indoor`
+- `outdoor`
+- `mix`
+
+`weather_backup` indicates whether indoor alternatives should be considered for outdoor activities.
+
+Live weather validation requires a connected weather provider. Until then, weather preferences must not be presented as verified forecasts.
 
 ## 5. Place Data Model
 
-The Place model stores information about locations that TripAgent may recommend or include in an itinerary.
+The Place model stores information about locations recommended by TripAgent.
 
-Source: `frontend/src/types/index.ts`
+The structure supports incomplete external API information.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Required |
+| `sources` | `Array<mapbox \| foursquare \| seed>` | Existing provider labels |
+| `provider_ids` | `Record<string, string>` | Provider identifiers |
+| `name` | string | Nonempty |
+| `categories` | string[] | Provider categories |
+| `experience_types` | `ExperienceCategory[]` | Experience categories |
+| `lat`, `lng` | number | Valid coordinates |
+| `address` | string | Location address |
+| `price_level` | `1 \| 2 \| 3 \| 4 \| null` (optional) | General price category |
+| `est_cost_low` | number or null (optional) | Minimum estimated cost |
+| `est_cost_high` | number or null (optional) | Maximum estimated cost |
+| `cost_basis` | `known \| price_level \| free \| unknown` | Cost evidence |
+| `hours` | `OpeningPeriod[] \| null` (optional) | Structured opening hours |
+| `rating` | number or null (optional) | Provider rating |
+| `review_count` | number or null (optional) | Number of reviews |
+| `popularity` | number or null (optional) | Popularity information |
+| `local_signal` | `tourist \| local \| hidden \| unknown` | Local classification |
+| `field_provenance` | `Record<string, Provenance>` | Information source |
+| `retrieved_at` | ISO 8601 datetime string | Retrieval timestamp |
+| `tip` | string or null (optional) | Additional place information |
+| `accessibility_status` | `yes \| limited \| no \| unknown` (optional) | Default `unknown` |
+| `dietary_options` | `DietaryPreference[] \| null` (optional) | Default `null` |
+| `kid_friendly` | boolean or null (optional) | Default `null` |
+
+### 5.1 Experience Categories
+
+Supported categories:
+
+- `food`
+- `cafe`
+- `nature`
+- `culture`
+- `shopping`
+- `nightlife`
+- `event`
+- `landmark`
+
+### 5.2 OpeningPeriod Data Model
+
+Opening hours use structured periods rather than unformatted strings.
 
 | Field | Type | Description |
 |---|---|---|
-| id | string | Unique identifier for the place |
-| sources | string[] | Data providers such as mapbox, foursquare, or seed |
-| provider_ids | Record<string, string> | Identifiers assigned by external providers |
-| name | string | Name of the place |
-| categories | string[] | Categories associated with the place |
-| experience_types | ExperienceCategory[] | Types of experiences offered |
-| lat | number | Latitude of the location |
-| lng | number | Longitude of the location |
-| address | string | Physical address |
-| price_level | 1, 2, 3, 4, or null (optional) | General price category |
-| est_cost_low | number or null (optional) | Minimum estimated cost |
-| est_cost_high | number or null (optional) | Maximum estimated cost |
-| cost_basis | CostBasis | How the cost was determined |
-| hours | string or null (optional) | Opening hours |
-| rating | number or null (optional) | Average user rating |
-| review_count | number or null (optional) | Number of reviews |
-| popularity | number or null (optional) | Popularity score |
-| local_signal | LocalSignal | Whether the place is tourist-oriented or local |
-| field_provenance | Record<string, Provenance> | Source of each field's information |
-| retrieved_at | string | Timestamp when the information was retrieved |
-| tip | string or null (optional) | Additional information about the place |
+| `day` | weekday enum | Day of the week |
+| `open` | `HH:MM` | Opening time |
+| `close` | `HH:MM` | Closing time |
+| `closes_next_day` | boolean | Default false |
 
-### Allowed Values
+Supported weekdays:
 
-**ExperienceCategory:**
-`food`, `cafe`, `nature`, `culture`, `shopping`, `nightlife`, `event`, `landmark`
+`monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
 
-**CostBasis:**
-`known`, `price_level`, `free`, `unknown`
+Example:
 
-**LocalSignal:**
-`tourist`, `local`, `hidden`, `unknown`
+```json
+{
+  "day": "monday",
+  "open": "09:00",
+  "close": "17:00",
+  "closes_next_day": false
+}
+```
 
-### Proposed Validation Rules
+If opening hours are unavailable, use `null`.
 
-1. The place ID and name must be non-empty strings.
-2. Latitude must be between -90 and 90.
-3. Longitude must be between -180 and 180.
-4. Price level must be between 1 and 4 when provided.
-5. Estimated costs must be non-negative when provided.
-6. The minimum estimated cost must not exceed the maximum estimated cost when both are available.
-7. Cost basis must match one of the allowed values.
-8. Experience categories must match the supported categories.
-9. Local signal must match one of the allowed values.
-10. The retrieval timestamp should use ISO 8601 format.
+An empty list does not automatically prove that a place is permanently closed.
 
-### Validation Considerations
+Holiday closures and timezone differences must be handled separately.
 
-Place information may come from external providers and may be incomplete or outdated.
+### 5.3 Accessibility Status
 
-A missing estimated cost should not automatically be treated as zero.
+The accessibility field supports four states:
 
-The validation system should distinguish between a place that is confirmed free and a place whose cost is unknown.
+- `yes`: Accessibility is reported as available.
+- `limited`: Partial accessibility is reported.
+- `no`: Accessibility is reported as unavailable.
+- `unknown`: Information is unavailable.
 
-Opening hours and other provider information may need additional verification before an activity is included in the final itinerary.
+A generic accessibility status does not confirm every specific accessibility requirement.
+
+### 5.4 Dietary Information
+
+`dietary_options` is optional.
+
+- `null`: Dietary information is unknown.
+- `[]`: No supported options are confirmed, only when reliable provider data establishes this.
+- `["vegetarian", "vegan"]`: Reported dietary options.
+
+Dietary categories must not be treated as guarantees of allergen safety.
+
+### 5.5 Kid-Friendly Information
+
+`kid_friendly` may contain:
+
+- `true`
+- `false`
+- `null`
+
+When suitability is inferred from categories such as parks or zoos, its provenance must be recorded as inferred.
+
+### 5.6 External Provider Data Rules
+
+1. Missing external information must remain unknown.
+2. Estimated costs must not be represented as verified ticket prices.
+3. Price levels do not equal actual ticket costs.
+4. Ratings and review counts are optional.
+5. Accessibility and dietary support must not be assumed.
+6. Opening-hour information must be normalized before validation.
+7. Hospital searches are handled separately rather than stored in every Place.
+8. Provider limitations must be reflected in validation results.
 
 ## 6. Activity Data Model
 
-The Activity model represents a scheduled activity within a travel itinerary. Each activity has a location, starting time, ending time, estimated cost, and priority.
+The Activity model represents scheduled events in an itinerary.
 
-Source: `frontend/src/types/index.ts`
-
-| Field | Type | Description |
+| Field | Type | Notes |
 |---|---|---|
-| id | string | Unique identifier for the activity |
-| trip_id | string | Identifies the trip |
-| version | number (integer) | Itinerary version |
-| day | number (integer) | Day of the trip |
-| place_id | string | Identifier of the associated place |
-| start | string | Activity starting date and time |
-| end | string | Activity ending date and time |
-| est_cost | number or null | Estimated activity cost |
-| cost_basis | CostBasis | How the estimated cost was determined |
-| priority | Priority | Importance of the activity |
-| purpose_tags | string[] | Categories or purposes of the activity |
-| status | ActivityStatus | Current activity status |
-| change_type | ChangeType or null (optional) | How the activity changed during replanning |
-| reason | string or null (optional) | Explanation for the change |
-| warnings | ValidationResult[] (optional) | Validation warnings related to the activity |
-| backups | Backup[] (optional) | Alternative activities |
-| place | Place | Full information about the associated place |
+| `id` | string | Activity identifier |
+| `trip_id` | string | Associated trip |
+| `version` | integer | Itinerary version |
+| `day` | integer | Positive trip day |
+| `place_id` | string | Associated place |
+| `start` | ISO 8601 datetime string | Start time |
+| `end` | ISO 8601 datetime string | End time |
+| `est_cost` | number or null | Estimated cost |
+| `cost_basis` | `known \| price_level \| free \| unknown` | Cost evidence |
+| `priority` | `high \| medium \| low` | Activity importance |
+| `purpose_tags` | string[] | Activity purposes |
+| `status` | `planned \| done \| locked \| cancelled` | Activity state |
+| `change_type` | `added \| replaced \| moved \| removed \| kept \| null` (optional) | Replanning change |
+| `reason` | string or null (optional) | Explanation |
+| `warnings` | `ValidationResult[]` (optional) | Validation warnings |
+| `backups` | `Backup[]` (optional) | Alternative activities |
+| `place` | `Place` | Associated place information |
+| `splurge` | boolean | Default false |
 
-### Allowed Values
+### 6.1 Backup Data Model
 
-**Priority:** `high`, `medium`, `low`
+| Field | Type |
+|---|---|
+| `activity_id` | string |
+| `place_id` | string |
+| `rank` | number |
+| `purpose_similarity` | number |
+| `cost_delta` | number |
+| `travel_delta_min` | number |
+| `validated_at` | ISO 8601 datetime string |
 
-**ActivityStatus:** `planned`, `done`, `locked`, `cancelled`
+### 6.2 Activity Validation Rules
 
-**ChangeType:** `added`, `replaced`, `moved`, `removed`, `kept`
-
-**CostBasis:** `known`, `price_level`, `free`, `unknown`
-
-### Proposed Validation Rules
-
-1. The activity ID and trip ID must be non-empty strings.
-2. Each activity must reference a valid place.
-3. The starting time must be earlier than the ending time.
-4. The day number must correspond to a valid day of the trip.
-5. Estimated costs must be non-negative when provided.
-6. Priority, status, change type, and cost basis must use their allowed values.
-7. Start and end timestamps should use a consistent ISO 8601 datetime format.
-
-### Activity Overlap Validation
-
-Activities within the same itinerary must not overlap.
-
-For two activities A and B, an overlap occurs when:
-
-`A.start < B.end AND B.start < A.end`
-
-Example:
-
-| Activity | Start | End | Result |
-|---|---|---|---|
-| Museum | 10:00 | 12:00 | |
-| Lunch | 11:30 | 13:00 | FAIL — Overlap |
-
-Activities that touch at the same boundary do not overlap.
-
-Example:
-
-- Activity A: 10:00–11:00
-- Activity B: 11:00–12:00
-- Result: PASS
-
-The validator should compare activities belonging to the same itinerary version using their complete dates and times.
-
-### Activity Cost Validation
-
-Each activity contains an estimated cost (`est_cost`) and a cost basis (`cost_basis`).
-
-- `known`: The cost is based on available price information.
-- `price_level`: The cost is estimated using a price category.
-- `free`: The activity is identified as free.
-- `unknown`: The cost is not known.
-
-An unknown cost must not automatically be treated as zero.
-
-Budget validation should follow the team's agreed policy for handling uncertain costs.
+1. Activity identifiers must be valid.
+2. Start time must be earlier than end time.
+3. Estimated costs must be nonnegative when provided.
+4. Activity status and priority must match allowed values.
+5. Activities must reference valid places.
+6. Splurge activities must be excluded from regular budget calculations.
+7. Splurge activities must receive high priority.
+8. Replanning must not remove requested splurges without user confirmation.
 
 ## 7. ValidationResult Data Model
 
-The ValidationResult model represents the outcome of a validation check. It tells the system whether a rule passed or failed and identifies the activities involved.
-
-Source: `frontend/src/types/index.ts`
+The ValidationResult model records the outcome of validation checks.
 
 | Field | Type | Description |
 |---|---|---|
-| id | string | Unique identifier for the validation result |
-| trip_id | string | Trip associated with the validation result |
-| version | number (integer) | Itinerary version being validated |
-| rule | string | Name of the validation rule |
-| passed | boolean | Whether the validation check passed |
-| severity | Severity | Importance of the validation result |
-| message | string | Explanation of the validation outcome |
-| activity_ids | string[] | Identifiers of activities involved |
+| `id` | string | Validation identifier |
+| `trip_id` | string | Associated trip |
+| `version` | integer | Itinerary version |
+| `rule` | string | Validation rule |
+| `passed` | boolean | Whether the check passed |
+| `severity` | `hard \| soft \| data-gap` | Severity |
+| `message` | string | Validation explanation |
+| `activity_ids` | string[] | Related activities |
 
-### Allowed Severity Values
+### Severity Values
 
-- `hard`: A constraint violation that must be addressed.
-- `soft`: A warning or preference that may be flexible.
-- `data-gap`: Missing or insufficient information prevents a confident decision.
+**hard:** A constraint violation requiring correction.
 
-### Example: Overlapping Activities
+**soft:** A warning or flexible preference violation.
+
+**data-gap:** Insufficient information to determine validity.
+
+Unknown information must not be marked as a confirmed pass.
+
+### Example ValidationResult
 
 ```json
 {
@@ -325,46 +370,269 @@ Source: `frontend/src/types/index.ts`
   "rule": "no_overlap",
   "passed": false,
   "severity": "hard",
-  "message": "Museum and lunch overlap between 11:30 and 12:00.",
+  "message": "Two scheduled activities overlap.",
   "activity_ids": ["A001", "A002"]
 }
 ```
 
-### Example: Budget Validation
+## 8. MustDo Data Model
+
+The MustDo model represents activities the traveler specifically requests.
+
+| Field | Type | Default / Rules |
+|---|---|---|
+| `text` | string | Required |
+| `splurge` | boolean | Default false |
+| `place_id` | string or null | Default null |
+
+### MustDo Rules
+
+1. Text must be nonempty.
+2. Splurge defaults to false.
+3. Place ID may remain null until discovery.
+4. Splurges are excluded from regular budget calculations.
+5. Splurges receive high activity priority.
+6. Requested activities must not be invented if discovery fails.
+7. The system must ask for clarification if a requested place cannot be identified.
+
+### Example MustDo
 
 ```json
 {
-  "id": "V002",
-  "trip_id": "T001",
-  "version": 1,
-  "rule": "budget_limit",
-  "passed": false,
-  "severity": "hard",
-  "message": "Estimated trip cost exceeds the specified budget.",
-  "activity_ids": ["A001", "A002", "A003"]
+  "text": "Seaplane tour",
+  "splurge": true,
+  "place_id": null
 }
 ```
 
-### Proposed Validation Rules
+## 9. Question Data Model
 
-1. Each validation result must have a unique, non-empty identifier.
-2. The trip ID and itinerary version must identify the itinerary being checked.
-3. The `rule` field must identify the validation check performed.
-4. The `passed` field must contain a boolean value (`true` or `false`).
-5. The `severity` field must match an allowed value.
-6. The `message` field should clearly explain the validation outcome.
-7. The `activity_ids` field must contain a list of relevant activity identifiers.
+The Question model represents a question asked when the system requires clarification.
 
-### Validation Behavior
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique question ID |
+| `field` | string | Field requiring clarification |
+| `text` | string | Question shown to the traveler |
+| `options` | string[] (optional) | Suggested answers |
 
-The validation system should return structured results rather than only printing error messages.
+### Example Question
 
-For example:
+```json
+{
+  "id": "Q001",
+  "field": "budget_max",
+  "text": "What is your maximum budget?",
+  "options": ["200", "500", "No limit"]
+}
+```
 
-- If two activities overlap, the overlap validator returns a failed ValidationResult.
-- If the itinerary exceeds a strict budget, the budget validator returns a failed ValidationResult.
-- If the cost of an activity is unknown, the validator should report the uncertainty according to the team's agreed policy.
+### Question Rules
 
-These results can be used by the AI agents to identify problems and revise the itinerary.
+1. Question ID must be nonempty.
+2. The field must identify the information requiring clarification.
+3. Question text must be provided.
+4. Options must contain strings when supplied.
+5. Critical missing or contradictory information should trigger clarification before planning.
 
-The exact rule names and handling of uncertain costs must be confirmed by the team.
+## 10. ExecutionEvent Data Model
+
+The ExecutionEvent model records individual steps performed by the AI workflow.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Event identifier |
+| `trip_id` | string | Associated trip |
+| `run_id` | string | Planning run |
+| `node` | string | Workflow component |
+| `type` | `node \| tool \| llm \| validation \| loop` | Event type |
+| `iteration` | integer | Nonnegative |
+| `status` | `started \| ok \| failed \| degraded \| skipped` | Execution status |
+| `duration_ms` | number | Nonnegative milliseconds |
+| `metadata` | `Record<string, unknown>` | Additional event information |
+| `ts` | ISO 8601 datetime string | Timestamp |
+
+### Example ExecutionEvent
+
+```json
+{
+  "id": "E001",
+  "trip_id": "T001",
+  "run_id": "R001",
+  "node": "validation",
+  "type": "validation",
+  "iteration": 1,
+  "status": "ok",
+  "duration_ms": 120,
+  "metadata": {
+    "checks_completed": 2
+  },
+  "ts": "2026-10-13T14:30:00Z"
+}
+```
+
+### ExecutionEvent Rules
+
+1. Event identifiers must be nonempty.
+2. Event type must match allowed values.
+3. Execution status must match allowed values.
+4. Iteration must be nonnegative.
+5. Duration must be nonnegative.
+6. Metadata must be a structured object.
+7. Timestamps must follow ISO 8601.
+8. Sensitive information and API secrets must not be stored in event metadata.
+
+## 11. Other Existing Frontend Models
+
+The revised contract preserves the following existing frontend entities:
+
+- `EventItem`
+- `ItineraryVersion`
+- `ChangeEvent`
+- `ReplanDiff`
+- `ReplanEvent`
+- `LatLng`
+- `DayCluster`
+- `RouteLeg`
+- `ItineraryDay`
+- `Itinerary`
+- `RunStatus`
+- `InfeasibleReport`
+- `CreateTripResponse`
+- `PlanResponse`
+
+Their definitions remain as specified in:
+
+`frontend/src/types/index.ts`
+
+The existing `ChangeEvent.type` continues to support `weather`.
+
+These entities must not be removed or renamed without an agreed contract change.
+
+## 12. Shared Validation Rules
+
+### 12.1 Activity Overlap Validation
+
+Rule name: `no_overlap`
+
+For two active activities A and B belonging to the same trip and itinerary version:
+
+`A.start < B.end AND B.start < A.end`
+
+If the condition is true, the activities overlap.
+
+The validator returns:
+
+- `passed: false`
+- `severity: hard`
+- Relevant activity IDs
+- An explanatory message
+
+Activities that touch at exactly the same boundary do not overlap.
+
+Example:
+
+| Activity | Start | End | Result |
+|---|---|---|---|
+| Museum | 10:00 | 12:00 | |
+| Lunch | 11:30 | 13:00 | FAIL |
+
+Cancelled activities are excluded from the active schedule check.
+
+Complete dates and times must be compared rather than time-of-day alone.
+
+### 12.2 Budget Validation
+
+Rule name: `budget_limit`
+
+1. Validate nonnegative budget limits.
+2. Ensure budget_min does not exceed budget_max.
+3. Skip budget validation when budget_strictness is `none`.
+4. Exclude splurge activities from the regular budget calculation.
+5. Include known, non-splurge activity costs in the budget total.
+6. Compare the total against budget_max when a maximum is provided.
+7. A strict budget violation produces a hard failure.
+8. A flexible budget violation produces a soft warning.
+9. Unknown non-splurge costs produce a data-gap result.
+10. Budget minimum is guidance for ranking, not a failure threshold.
+11. Qualitative budget levels must not be converted to numeric limits without clarification or an agreed rule.
+12. Costs must be interpreted consistently as per-person or whole-group amounts before multiplication.
+
+### Example Budget Calculation
+
+Maximum budget: $500
+
+| Activity | Cost | Splurge |
+|---|---|---|
+| Museum | $50 | No |
+| Lunch | $40 | No |
+| Shopping | $100 | No |
+| Helicopter tour | $350 | Yes |
+
+Regular budget total:
+
+`50 + 40 + 100 = 190`
+
+Splurge total:
+
+`350`
+
+Overall estimated total:
+
+`540`
+
+Budget comparison:
+
+`190 <= 500`
+
+Result: PASS, assuming all relevant costs are known and use the same cost basis.
+
+### 12.3 Accessibility Validation
+
+1. Confirmed incompatibility with a required accessibility condition produces a hard failure.
+2. Missing accessibility information produces data-gap.
+3. Generic accessibility status does not confirm every specific accommodation.
+4. The system must not claim accessibility without reliable supporting information.
+
+### 12.4 Dietary Validation
+
+1. Dietary preferences apply to food-related locations.
+2. Missing dietary information produces data-gap.
+3. Documented mismatches may produce soft warnings.
+4. Nut-allergy requirements must always include a recommendation to confirm directly with the venue.
+5. The system must never guarantee allergen safety.
+
+### 12.5 Family-Friendly Validation
+
+1. Known adult-only venues are disallowed when kid_friendly is true.
+2. Category-based family suitability must be marked as inferred.
+3. Unknown family suitability must not be treated as confirmed.
+
+### 12.6 Safety Validation
+
+1. Safety preferences must be explicitly selected by the traveler.
+2. The system may favor daylight activities and less isolated routes.
+3. No numeric safety score is supported by current provider information.
+4. The system must not guarantee that a location is safe.
+
+### 12.7 Medical Access Validation
+
+1. Hospital information must be obtained through a separate search.
+2. Nearby medical facilities must not be assumed without supporting data.
+3. Travel-time constraints must be verified before claiming that a hospital is within the requested distance or time.
+4. Missing medical-access data must be reported as unconfirmed.
+
+### 12.8 Weather Validation
+
+1. Indoor/outdoor preferences guide itinerary ranking.
+2. Weather backups provide alternatives for outdoor activities.
+3. Live forecast validation requires an integrated weather provider.
+4. Forecast-related claims must not be made without current supporting data.
+
+### 12.9 Opening Hours Validation
+
+1. Opening hours must use structured OpeningPeriod data.
+2. Activities should be checked against the venue's operating hours.
+3. Unknown opening hours produce data-gap.
+4. Holiday closures and exceptional hours require additional confirmation.
+5. The system must not mark an activity as confirmed open without sufficient evidence.
