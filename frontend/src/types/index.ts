@@ -7,7 +7,23 @@
  * models.
  */
 
-export type Provenance = 'explicit' | 'inferred' | 'default'
+/**
+ * Where a value came from. The UI must never hide uncertainty, so these are
+ * shown as separate labels (F-01):
+ *   from_text — the traveller wrote it in "Tell us more"
+ *   from_form — the traveller picked or typed it in the form
+ *   inferred  — we guessed it from another signal (e.g. "locals enjoy" -> 80% local)
+ *   default   — we assumed it; the traveller never chose it
+ * Shared contract: agree any change with Validation (two reviewers).
+ */
+export type Provenance = 'from_text' | 'from_form' | 'inferred' | 'default'
+
+/**
+ * Per-field provenance for provider data (Architecture §9.1). Separate from the
+ * preference `Provenance` above: this records whether a provider field was
+ * explicit, derived, or missing — not where a user preference came from.
+ */
+export type FieldProvenance = 'explicit' | 'inferred' | 'unknown'
 
 export type Severity = 'hard' | 'soft' | 'data-gap'
 
@@ -96,7 +112,7 @@ export interface Place {
   review_count?: number | null
   popularity?: number | null
   local_signal: LocalSignal
-  field_provenance: Record<string, Provenance>
+  field_provenance: Record<string, FieldProvenance>
   retrieved_at: string
   /** Free-text note from the provider; rendered as quoted data, never markup. */
   tip?: string | null
