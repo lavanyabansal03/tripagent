@@ -18,6 +18,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     MAPBOX_SECRET_TOKEN: str = ""
     FOURSQUARE_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./tripagent.db"
