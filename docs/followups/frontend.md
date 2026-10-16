@@ -5,11 +5,11 @@ on Oct 8, 2026. Paths are relative to `frontend/src/`.
 
 | # | Change | When | Owner | Status |
 |---|---|---|---|---|
-| F-01 | Fix the "where it came from" labels on *Here's what we understood* | Now (Sprint 1 demo) | Frontend + Preferences | Open |
-| F-02 | Add "Add your own" to the **Avoid** list | Now | Frontend | Open |
+| F-01 | Fix the "where it came from" labels on *Here's what we understood* | Now (Sprint 1 demo) | Frontend + Preferences | Fixed in #6 |
+| F-02 | Add "Add your own" to the **Avoid** list | Now | Frontend | Fixed in #6 |
 | F-03 | Budget as a range (min to max), not one number | Sprint 2 | Frontend + Validation | Open |
 | F-04 | More "Getting around" options | Sprint 2, after the Mapbox spike | Frontend + Tools | Open |
-| F-05 | Linter: keep oxlint, drop the ESLint plan | Now (docs only) | Frontend | Open, needs team OK |
+| F-05 | Linter: keep oxlint, drop the ESLint plan | Now (docs only) | Frontend | Fixed in #6, needs team OK |
 | F-06 | Map labels overlap when legs are close ("12 min" drawn twice) | Sprint 2 (US-07) | Frontend & Maps | Open |
 
 ---
