@@ -1,0 +1,66 @@
+# Render Blueprint for TripAgent.
+#
+# Apply it at: Render Dashboard -> New + -> Blueprint -> connect this repo -> Apply.
+# It creates two services:
+#   tripagent-api  — FastAPI backend (web service)
+#   tripagent-web  — Svelte frontend (static site), running in demo mode
+#
+# Free plan notes: the web service spins down after ~15 min idle, so the first
+# request after a pause takes a few seconds. The static site is always fast.
+# Secrets are `sync: false`, so Render prompts for them and never stores them in
+# the repo. Leave the optional provider keys blank while DEMO_MODE=true.
+
+services:
+  - type: web
+    name: tripagent-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: DEMO_MODE
+        value: "true"
+      - key: DATABASE_URL
+        value: sqlite:///./tripagent.db
+      # The API has no cookies/auth, so any origin may call it. Tighten to the
+      # frontend URL once it is known, e.g. https://tripagent-web.onrender.com
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: MAPBOX_SECRET_TOKEN
+        sync: false
+      - key: FOURSQUARE_API_KEY
+        sync: false
+
+  - type: web
+    name: tripagent-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Demo mode keeps the public demo working before the trip endpoints land.
+      # Set to false once the backend implements POST /api/trips and friends.
+      - key: VITE_DEMO_MODE
+        value: "true"
+      # Default Render URL for the API service above. Update if you rename the
+      # service or attach a custom domain.
+      - key: VITE_API_BASE
+        value: https://tripagent-api.onrender.com
+      # Public, URL-restricted Mapbox token (safe to expose). Optional.
+      - key: VITE_MAPBOX_PUBLIC_TOKEN
+        sync: false
+    routes:
+      # SPA fallback: serve the app for any path.
+      - type: rewrite
+        source: /*
+        destination: /index.html
