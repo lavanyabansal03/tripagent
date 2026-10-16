@@ -9,14 +9,11 @@ from app.config import settings
 
 app = FastAPI(title="TripAgent API")
 
-# Browser origins allowed to call this API. Local dev defaults to the Vite dev
-# server; production sets CORS_ORIGINS (use "*" when there is no cookie/auth).
-_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
-_allow_all = _origins == ["*"]
+# Let the Vite dev server (frontend) call this API from the browser.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=not _allow_all,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

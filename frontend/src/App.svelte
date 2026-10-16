@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { t } from './copy/i18n'
   import { store } from './state/store.svelte'
-  import { checkHealth, DEMO_MODE, API_ORIGIN, type HealthStatus } from './api/client'
+  import { checkHealth, DEMO_MODE, type HealthStatus } from './api/client'
   import SetupPage from './pages/SetupPage.svelte'
   import UnderstoodPage from './pages/UnderstoodPage.svelte'
   import ItineraryPage from './pages/ItineraryPage.svelte'
@@ -34,10 +34,6 @@
   }
 
   const route = $derived(store.route)
-  // Only surface backend connectivity when a backend is actually expected: in
-  // live mode, or when VITE_API_BASE points at a deployed API. A demo build on a
-  // static host with no backend would otherwise show a misleading "offline".
-  const showBackend = !DEMO_MODE || Boolean(API_ORIGIN)
   const backendLabel = $derived(
     !checked
       ? t('app.backendChecking')
@@ -63,18 +59,16 @@
         {t('app.demoBadge')}
       </span>
     {/if}
-    {#if showBackend}
-      <span
-        class="backend"
-        class:ok={health}
-        class:offline={checked && !health}
-        data-testid="backend-status"
-        aria-live="polite"
-      >
-        <span class="dot" aria-hidden="true"></span>
-        {backendLabel}
-      </span>
-    {/if}
+    <span
+      class="backend"
+      class:ok={health}
+      class:offline={checked && !health}
+      data-testid="backend-status"
+      aria-live="polite"
+    >
+      <span class="dot" aria-hidden="true"></span>
+      {backendLabel}
+    </span>
     <button
       type="button"
       class="theme"
