@@ -58,13 +58,9 @@ cd frontend && npm run dev
 | `VITE_DEMO_MODE` | `true` (default) uses recorded fixtures; `false` calls the FastAPI backend at `/api` |
 | `VITE_MAPBOX_PUBLIC_TOKEN` | URL-restricted **public** map token. Blank falls back to the built-in schematic map. Only this token reaches the browser (SRS §11) |
 | `VITE_API_PROXY` | Dev-server proxy target for the FastAPI service |
-| `VITE_API_BASE` | Absolute backend origin for deployed builds (static hosts have no dev proxy). Blank in development |
 
 Never commit a Mapbox secret token or provider keys. The frontend only ever
 receives the public map token.
-
-Deployment (Render Blueprint, Vercel, Netlify, Docker) is documented in
-[`docs/deployment.md`](../docs/deployment.md).
 
 ## Architecture
 
