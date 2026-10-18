@@ -335,6 +335,16 @@ The Activity model represents scheduled events in an itinerary.
 7. Splurge activities must receive high priority.
 8. Replanning must not remove requested splurges without user confirmation.
 
+### 6.3 Activity Cost Interpretation
+
+1. `est_cost` represents the total estimated activity cost for the traveling group.
+2. Per-person prices must be multiplied by the number of paying travelers before being stored in `est_cost`.
+3. Group prices must not be multiplied by the number of travelers.
+4. Unknown costs must remain `null`, not zero.
+5. Splurge activities are excluded from regular budget validation but included in the overall estimated trip cost when known.
+6. Budget calculations must not multiply `est_cost` by group size again.
+
+
 ## 7. ValidationResult Data Model
 
 The ValidationResult model records the outcome of validation checks.
