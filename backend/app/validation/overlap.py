@@ -1,31 +1,50 @@
 from datetime import datetime
 
 
-def check_overlap(activities):
-    """
-    Check whether scheduled activities overlap.
-    Returns True if no overlaps are found.
-    """
+def find_overlaps(activities):
+    """Return the IDs of activities with overlapping times."""
 
     active = [
         activity
         for activity in activities
-        if activity["status"] != "cancelled"
+        if activity.get("status") != "cancelled"
     ]
 
-    # Sort activities by their starting times
-    active.sort(
-        key=lambda activity: datetime.fromisoformat(activity["start"])
+    # Convert timestamps and sort activities by start time
+    active = sorted(
+        active,
+        key=lambda activity: datetime.fromisoformat(
+            activity["start"]
+        ),
     )
 
-    for i in range(len(active) - 1):
-        first = active[i]
-        second = active[i + 1]
+    conflicts = []
 
+    for i, first in enumerate(active):
         first_end = datetime.fromisoformat(first["end"])
-        second_start = datetime.fromisoformat(second["start"])
 
-        if second_start < first_end:
-            return False
+        for second in active[i + 1:]:
+            second_start = datetime.fromisoformat(
+                second["start"]
+            )
 
-    return True
+            if second_start >= first_end:
+                break
+
+            conflicts.append({
+                "activity_ids": [
+                    first.get("id"),
+                    second.get("id"),
+                ],
+                "message": "Activities overlap",
+                "severity": "error",
+                "passed": False,
+            })
+
+    return conflicts
+
+
+def check_overlap(activities):
+    """Return True when no activities overlap."""
+
+    return len(find_overlaps(activities)) == 0
