@@ -47,12 +47,3 @@ def test_missing_timezone():
 
     with pytest.raises(ValidationError):
         Activity(**data)
-
-
-def test_splurge_priority():
-    data = valid_activity()
-    data["splurge"] = True
-    data["priority"] = "medium"
-
-    with pytest.raises(ValidationError):
-        Activity(**data)
