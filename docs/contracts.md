@@ -16,7 +16,7 @@ It preserves the original contract's field names and models except where the tea
 - **Tests:** `backend/tests/`.
 - **Preferences extraction:** `backend/app/agents/preferences.py`.
 - JSON keys use `snake_case`.
-- Dates use `YYYY-MM-DD`, timestamps use ISO 8601, and scheduled activities must be interpreted in a consistent destination timezone.
+- Dates use `YYYY-MM-DD`. Timestamps use ISO 8601. Scheduled activity timestamps must include a UTC offset (for example, `2026-10-20T14:00:00-07:00`); use the destination’s correct offset for the activity date, including daylight saving time. A destination timezone identifier is still needed when generating future local times, because a fixed offset alone does not capture daylight-saving transitions.
 - Required fields are listed without **optional**.
 - `T | null` means the value may be `null`; **optional** means the key can be omitted.
 - Defined defaults apply when normalizing input.
@@ -324,7 +324,15 @@ The Activity model represents scheduled events in an itinerary.
 | `travel_delta_min` | number |
 | `validated_at` | ISO 8601 datetime string |
 
-### 6.2 Activity Validation Rules
+### 6.2 Activity Cost Convention (Proposed; Team Confirmation Needed)
+
+- `est_cost` is the **estimated total cost for the whole traveling group**, after any required per-person calculation.
+- Example: three paying travelers × $20 per ticket gives `est_cost: 60`; a $50 per-group price gives `est_cost: 50`.
+- When the quote or number of paying travelers cannot be established, use `null`; do not substitute `0`.
+- Splurge costs count toward the overall estimated trip total but not the regular budget limit.
+- `est_cost` alone does not store the provider’s raw per-person price or price basis; preserve that upstream if an audit or recalculation is needed.
+
+### 6.3 Activity Validation Rules
 
 1. Activity identifiers must be valid.
 2. Start time must be earlier than end time.
@@ -334,16 +342,6 @@ The Activity model represents scheduled events in an itinerary.
 6. Splurge activities must be excluded from regular budget calculations.
 7. Splurge activities must receive high priority.
 8. Replanning must not remove requested splurges without user confirmation.
-
-### 6.3 Activity Cost Interpretation
-
-1. `est_cost` represents the total estimated activity cost for the traveling group.
-2. Per-person prices must be multiplied by the number of paying travelers before being stored in `est_cost`.
-3. Group prices must not be multiplied by the number of travelers.
-4. Unknown costs must remain `null`, not zero.
-5. Splurge activities are excluded from regular budget validation but included in the overall estimated trip cost when known.
-6. Budget calculations must not multiply `est_cost` by group size again.
-
 
 ## 7. ValidationResult Data Model
 
@@ -566,7 +564,9 @@ Rule name: `budget_limit`
 9. Unknown non-splurge costs produce a data-gap result.
 10. Budget minimum is guidance for ranking, not a failure threshold.
 11. Qualitative budget levels must not be converted to numeric limits without clarification or an agreed rule.
-12. Costs must be interpreted consistently as per-person or whole-group amounts before multiplication.
+12. Normalize `Activity.est_cost` to the total for the traveling group before budget validation. Multiply a per-person quoted price by the number of paying travelers only once; never multiply an already-group-total `est_cost` again.
+13. If a provider quote does not say whether it is per-person or per-group, the cost is not confirmed and budget validation must report `data-gap` rather than guess.
+14. The team must confirm that `budget_min` and `budget_max` mean whole-group amounts before treating this convention as final.
 
 ### Example Budget Calculation
 
@@ -646,3 +646,14 @@ Result: PASS, assuming all relevant costs are known and use the same cost basis.
 3. Unknown opening hours produce data-gap.
 4. Holiday closures and exceptional hours require additional confirmation.
 5. The system must not mark an activity as confirmed open without sufficient evidence.
+
+## 13. Open Decisions and Integration Notes
+
+The items below require agreement or implementation work; their presence does **not** mean the existing frontend or backend has already adopted these formats.
+
+1. **Budget scope:** Confirm that min/max budgets apply to the entire group (the preference proposal recommends this but leaves the decision to the team).
+2. **Costs:** Confirm the proposed group-total interpretation for `Activity.est_cost` and how the number of *paying* travelers is determined.
+3. **Frontend migration:** Update existing frontend types that still use a single `budget` field or string-form `hours` to the agreed target format, with appropriate conversion where external provider data differs.
+4. **Splurge linkage:** When converting a `MustDo` into a scheduled `Activity`, copy `splurge`; if discovery cannot identify the requested place, request clarification rather than inventing a match.
+5. **Timezone:** Generate destination-local times using the destination’s timezone rules and serialize activity timestamps with the correct offset for each date.
+6. **Provider limitations:** Structured opening hours may be unavailable from external tools; keep `hours: null` and produce `data-gap` rather than invent hours.
