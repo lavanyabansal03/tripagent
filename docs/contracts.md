@@ -278,6 +278,13 @@ When suitability is inferred from categories such as parks or zoos, its provenan
 
 ### 5.6 External Provider Data Rules
 
+**Nitin’s provider spike notes (reported observations, not guarantees):** Mapbox returned structured opening-hour periods for approximately 80% of tested places. Exact ticket prices were not available in the tested responses; Foursquare Premium price tiers were documented but not tested. Ratings, accessibility, dietary information, and family suitability may be missing or inferred. These findings describe the tested sample, not guaranteed provider coverage.
+
+- `Place.cost_basis = "price_level"` indicates an estimate derived from a general price tier, **not a verified admission price**; keep the estimated amount `null` if no defensible estimate is possible.
+- `Place.field_provenance["kid_friendly"] = "inferred"` whenever a category is used to guess suitability. An inferred `true` is not confirmation.
+- For `accessibility_status`, use `"unknown"` when there is no trustworthy information; for `dietary_options`, use `null` when unknown, not `[]`.
+- Keep hospitals out of the `Place` fields: obtain nearby hospitals through a separate place search when needed.
+
 1. Missing external information must remain unknown.
 2. Estimated costs must not be represented as verified ticket prices.
 3. Price levels do not equal actual ticket costs.
