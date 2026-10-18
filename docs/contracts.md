@@ -347,7 +347,7 @@ The Activity model represents scheduled events in an itinerary.
 4. Activity status and priority must match allowed values.
 5. Activities must reference valid places.
 6. Splurge activities must be excluded from regular budget calculations.
-7. Splurge activities must receive high priority.
+7. Splurge status determines budget treatment and does not automatically determine activity priority
 8. Replanning must not remove requested splurges without user confirmation.
 
 ## 7. ValidationResult Data Model
@@ -406,7 +406,7 @@ The MustDo model represents activities the traveler specifically requests.
 2. Splurge defaults to false.
 3. Place ID may remain null until discovery.
 4. Splurges are excluded from regular budget calculations.
-5. Splurges receive high activity priority.
+5. Must-do activities should be prioritized during planning; splurge status alone does not determine priority.
 6. Requested activities must not be invented if discovery fails.
 7. The system must ask for clarification if a requested place cannot be identified.
 
