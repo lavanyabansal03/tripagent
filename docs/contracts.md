@@ -10,7 +10,7 @@ It preserves the original contract's field names and models except where the tea
 
 ## 2. Source of Truth and Conventions
 
-- **Canonical existing frontend types:** `frontend/src/types/index.ts`. This document defines the target changes to mirror into frontend and Python models.
+- **Existing implementation reference:** `frontend/src/types/index.ts` and the current backend API models. Preserve unchanged fields from these implementations; this document specifies agreed additions and proposed normalizations. Once reviewed and merged, the final contract and code must remain synchronized.
 - **Pydantic implementation:** `backend/app/models/`.
 - **Validation code:** `backend/app/validation/`.
 - **Tests:** `backend/tests/`.
@@ -52,7 +52,7 @@ The Trip model stores basic information about a traveler's trip.
 
 The TripRequirements model stores travel preferences and constraints.
 
-The original single `budget: number | null` is replaced with budget ranges and splurges.
+The agreed Oct 9 budget direction replaces the original single `budget: number | null` in `TripRequirements` with `budget_min`, `budget_max`, and splurges. Existing API requests and UI controls still using `budget` require a small migration/normalization step; do not silently pass both formats as independent canonical fields.
 
 | Field | Type | Default / Rules |
 |---|---|---|
@@ -215,7 +215,7 @@ Supported categories:
 
 ### 5.2 OpeningPeriod Data Model
 
-Opening hours use structured periods rather than unformatted strings.
+The validation-facing Place format uses structured periods. Existing frontend/provider code may currently expose `hours` as text; that data should be normalized at the provider-to-domain boundary where reliably parseable, rather than requiring a provider to return this shape. If parsing is uncertain, use `null` for normalized hours and retain raw provider text separately where useful.
 
 | Field | Type | Description |
 |---|---|---|
@@ -324,7 +324,7 @@ The Activity model represents scheduled events in an itinerary.
 | `travel_delta_min` | number |
 | `validated_at` | ISO 8601 datetime string |
 
-### 6.2 Activity Cost Convention (Proposed; Team Confirmation Needed)
+### 6.2 Activity Cost Convention (Proposed Implementation Decision)
 
 - `est_cost` is the **estimated total cost for the whole traveling group**, after any required per-person calculation.
 - Example: three paying travelers × $20 per ticket gives `est_cost: 60`; a $50 per-group price gives `est_cost: 50`.
@@ -564,9 +564,9 @@ Rule name: `budget_limit`
 9. Unknown non-splurge costs produce a data-gap result.
 10. Budget minimum is guidance for ranking, not a failure threshold.
 11. Qualitative budget levels must not be converted to numeric limits without clarification or an agreed rule.
-12. Normalize `Activity.est_cost` to the total for the traveling group before budget validation. Multiply a per-person quoted price by the number of paying travelers only once; never multiply an already-group-total `est_cost` again.
+12. **If the team adopts the group-total convention**, normalize `Activity.est_cost` to the total for the traveling group before budget validation. Multiply a per-person quoted price by the number of paying travelers only once; never multiply an already-group-total `est_cost` again.
 13. If a provider quote does not say whether it is per-person or per-group, the cost is not confirmed and budget validation must report `data-gap` rather than guess.
-14. The team must confirm that `budget_min` and `budget_max` mean whole-group amounts before treating this convention as final.
+14. Group-vs-person budget scope and the paying-traveler calculation remain open decisions in the Oct 9 proposal. Do not claim these are already approved.
 
 ### Example Budget Calculation
 
@@ -649,11 +649,13 @@ Result: PASS, assuming all relevant costs are known and use the same cost basis.
 
 ## 13. Open Decisions and Integration Notes
 
+**Change policy:** Align this document to working shared structures wherever they do not conflict with the Oct 9 preference direction. Only mandate changes for agreed new fields and essential validation behavior. Schema changes need team review and two PR reviewers; this draft is not itself a merged team decision.
+
 The items below require agreement or implementation work; their presence does **not** mean the existing frontend or backend has already adopted these formats.
 
 1. **Budget scope:** Confirm that min/max budgets apply to the entire group (the preference proposal recommends this but leaves the decision to the team).
 2. **Costs:** Confirm the proposed group-total interpretation for `Activity.est_cost` and how the number of *paying* travelers is determined.
-3. **Frontend migration:** Update existing frontend types that still use a single `budget` field or string-form `hours` to the agreed target format, with appropriate conversion where external provider data differs.
+3. **Minimum-change migration:** Keep existing Trip, Activity, ValidationResult, Question, and ExecutionEvent fields where unchanged. Update the frontend and backend API boundary for the approved budget range, MustDo, and preference additions. Accept the legacy single `budget` field only through an explicitly documented temporary adapter if needed; avoid two competing internal standards. For `hours`, preserve provider raw text and normalize to `OpeningPeriod[]` only when evidence permits. Do not require all tools to rewrite their provider responses.
 4. **Splurge linkage:** When converting a `MustDo` into a scheduled `Activity`, copy `splurge`; if discovery cannot identify the requested place, request clarification rather than inventing a match.
 5. **Timezone:** Generate destination-local times using the destination’s timezone rules and serialize activity timestamps with the correct offset for each date.
 6. **Provider limitations:** Structured opening hours may be unavailable from external tools; keep `hours: null` and produce `data-gap` rather than invent hours.
