@@ -54,7 +54,4 @@ class Activity(BaseModel):
         if self.start >= self.end:
             raise ValueError("Activity must end after it starts")
 
-        if self.splurge and self.priority != "high":
-            raise ValueError("Splurge activities must have high priority")
-
         return self
