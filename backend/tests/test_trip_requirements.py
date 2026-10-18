@@ -3,7 +3,6 @@ from pydantic import ValidationError
 
 from app.models.trip_requirements import TripRequirements
 
-
 # Sample valid trip information
 def valid_trip():
     return {
