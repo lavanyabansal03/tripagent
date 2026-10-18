@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 Weekday = Literal[
     "monday", "tuesday", "wednesday",
     "thursday", "friday", "saturday", "sunday"
