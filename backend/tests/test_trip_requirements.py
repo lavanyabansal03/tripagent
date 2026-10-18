@@ -1,7 +1,6 @@
 import pytest
-from pydantic import ValidationError
-
 from app.models.trip_requirements import TripRequirements
+from pydantic import ValidationError
 
 # Sample valid trip information
 def valid_trip():
