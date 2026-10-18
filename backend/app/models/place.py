@@ -8,7 +8,6 @@ Weekday = Literal[
     "monday", "tuesday", "wednesday",
     "thursday", "friday", "saturday", "sunday"
 ]
-
 DietaryPreference = Literal[
     "vegetarian", "vegan", "halal", "kosher",
     "gluten_free", "dairy_free", "nut_allergy"
