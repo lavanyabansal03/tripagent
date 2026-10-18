@@ -60,3 +60,35 @@ def test_negative_cost():
 
     with pytest.raises(ValueError):
         check_budget(activities, 500, "strict")
+
+
+def test_budget_passed():
+    activities = [{"est_cost": 200}]
+
+    result = check_budget(activities, 500, "strict")
+
+    assert result["budget_status"] == "passed"
+
+
+def test_budget_uncertain():
+    activities = [
+        {"est_cost": 200},
+        {"est_cost": None},
+    ]
+
+    result = check_budget(activities, 500, "strict")
+
+    assert result["budget_status"] == "uncertain"
+    assert result["unknown_costs"] == 1
+
+
+def test_budget_failed_even_with_unknown_costs():
+    activities = [
+        {"est_cost": 600},
+        {"est_cost": None},
+    ]
+
+    result = check_budget(activities, 500, "strict")
+
+    assert result["budget_status"] == "failed"
+    assert result["valid"] is False
