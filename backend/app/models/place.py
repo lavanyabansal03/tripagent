@@ -31,11 +31,11 @@ class Place(BaseModel):
     # Basic information
     id: str = Field(min_length=1)
     sources: list[Literal["mapbox", "foursquare", "seed"]]
-    provider_ids: dict[str, str]
+    provider_ids: dict[str, str] = Field(default_factory=dict)
 
     name: str = Field(min_length=1)
-    categories: list[str]
-    experience_types: list[ExperienceCategory]
+    categories: list[str] = Field(default_factory=list)
+    experience_types: list[ExperienceCategory] = Field(default_factory=list)
 
     # Location
     lat: float = Field(ge=-90, le=90)
@@ -68,8 +68,8 @@ class Place(BaseModel):
     # Data source information
     field_provenance: dict[
         str, Literal["explicit", "inferred", "default"]
-    ]
-
+    ] = Field(default_factory=dict)
+    
     retrieved_at: datetime
     tip: str | None = None
 
