@@ -31,15 +31,17 @@ class MedicalAccess(BaseModel):
 
 class TripRequirements(BaseModel):
 
-
+    # Basic trip information
     trip_id: str = Field(min_length=1)
     version: int = Field(ge=0)
 
     destination: str = Field(min_length=1)
-    start_date: date
-    end_date: date
 
+    # Dates can be missing during initial trip creation
+    start_date: date | None = None
+    end_date: date | None = None
 
+    # Budget preferences
     budget_min: float | None = Field(default=None, ge=0)
     budget_max: float | None = Field(default=None, ge=0)
 
@@ -53,7 +55,7 @@ class TripRequirements(BaseModel):
 
     must_do: list[MustDo] = Field(default_factory=list)
 
-
+    # Travel preferences
     mode: Literal[
         "walking", "transit", "driving", "cycling"
     ]
@@ -71,7 +73,7 @@ class TripRequirements(BaseModel):
     daily_start: time
     daily_end: time
 
-
+    # Dietary preferences
     dietary: list[
         Literal[
             "vegetarian",
@@ -84,7 +86,7 @@ class TripRequirements(BaseModel):
         ]
     ] = Field(default_factory=list)
 
-
+    # Accessibility preferences
     accessibility: list[
         Literal[
             "wheelchair",
@@ -95,7 +97,7 @@ class TripRequirements(BaseModel):
         ]
     ] = Field(default_factory=list)
 
-
+    # Original user input
     free_text: str
 
     provenance: dict[
@@ -103,7 +105,7 @@ class TripRequirements(BaseModel):
         Literal["explicit", "inferred", "default"]
     ]
 
-
+    # Group preferences
     travelers: Travelers = Field(default_factory=Travelers)
 
     kid_friendly: bool | None = None
@@ -112,30 +114,31 @@ class TripRequirements(BaseModel):
         "calm", "balanced", "adventurous"
     ] = "balanced"
 
-
+    # Safety preferences
     safety_first: bool = False
 
-
+    # Medical preferences
     medical_access: MedicalAccess = Field(
         default_factory=MedicalAccess
     )
 
-
+    # Weather preferences
     indoor_outdoor: Literal[
         "indoor", "outdoor", "mix"
     ] = "mix"
 
     weather_backup: bool = True
 
-  
+    # Validation rules
     @model_validator(mode="after")
     def validate_requirements(self):
 
-        # Check trip dates
-        if self.start_date > self.end_date:
-            raise ValueError(
-                "Start date cannot be after end date"
-            )
+        # Check trip dates only when both are provided
+        if self.start_date is not None and self.end_date is not None:
+            if self.start_date > self.end_date:
+                raise ValueError(
+                    "Start date cannot be after end date"
+                )
 
         # Check budget range
         if (
