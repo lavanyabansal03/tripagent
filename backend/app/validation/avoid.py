@@ -1,49 +1,58 @@
-def check_avoid_list(activities, avoid):
-    """
-    Check whether scheduled activities conflict
-    with the traveler's avoid list.
+def normalize_word(word):
+    """Normalize simple singular and plural words."""
+    word = word.strip().lower()
 
-    Returns a list of conflicts.
-    """
+    if word.endswith("ies") and len(word) > 3:
+        return word[:-3] + "y"
+
+    if word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+
+    return word
+
+
+def check_avoid_list(activities, avoid):
+    """Return activities that conflict with the traveler's avoid list."""
 
     conflicts = []
 
-    # Convert avoid preferences to lowercase
     avoid_terms = [
-        term.strip().lower()
+        normalize_word(term)
         for term in avoid
         if term.strip()
     ]
 
     for activity in activities:
-        # Ignore cancelled activities
         if activity.get("status") == "cancelled":
             continue
 
         place = activity.get("place") or {}
 
-        name = str(place.get("name") or "").lower()
-        categories = [
-            str(category).lower()
-            for category in place.get("categories", [])
+        searchable = [
+            place.get("name") or "",
+            *(place.get("categories") or []),
+            *(place.get("experience_types") or []),
         ]
-
-        experience_types = [
-            str(category).lower()
-            for category in place.get("experience_types", [])
-        ]
-
-        # Match against place name and categories
-        searchable = [name] + categories + experience_types
 
         for term in avoid_terms:
-            if any(term in value for value in searchable):
-                conflicts.append({
-                    "passed": False,
-                    "severity": "error",
-                    "activity_ids": [activity.get("id")],
-                    "message": f"Activity conflicts with avoid preference: {term}",
-                })
-                break
+            for value in searchable:
+                words = [
+                    normalize_word(word)
+                    for word in str(value).split()
+                ]
+
+                if term in words or term in normalize_word(str(value)):
+                    conflicts.append({
+                        "passed": False,
+                        "severity": "error",
+                        "activity_ids": [activity.get("id")],
+                        "message": (
+                            f"Activity conflicts with avoid preference: {term}"
+                        ),
+                    })
+                    break
+            else:
+                continue
+            break
 
     return conflicts
