@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from app.tools.base import LatLng, Mode
 from app.tools.mock_places import distance_km, rough_minutes
