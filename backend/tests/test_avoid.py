@@ -90,3 +90,20 @@ def test_case_insensitive_matching():
     conflicts = check_avoid_list(activities, ["Aquarium"])
 
     assert len(conflicts) == 1
+
+def test_plural_avoid_preference():
+    activities = [
+        {
+            "id": "activity_007",
+            "status": "planned",
+            "place": {
+                "name": "Art Museum",
+                "categories": ["museum"],
+            },
+        }
+    ]
+
+    conflicts = check_avoid_list(activities, ["museums"])
+
+    assert len(conflicts) == 1
+    assert conflicts[0]["activity_ids"] == ["activity_007"]
