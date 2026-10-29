@@ -1,0 +1,62 @@
+{
+  "1": {
+    "interests": ["beaches", "seafood"],
+    "avoid": ["nightlife"],
+    "budget": "cheap",
+    "max_travel_minutes": 20
+  },
+  "2": {
+    "interests": ["architecture", "coffee", "local neighborhoods"],
+    "avoid": ["touristy attractions"],
+    "budget": "moderate",
+    "max_travel_minutes": 60
+  },
+  "3": {
+    "interests": ["nature trails", "scenic views"],
+    "avoid": ["clubs", "partying"],
+    "budget": "cheap",
+    "max_travel_minutes": 40
+  },
+  "4": {
+    "interests": ["live music", "tacos", "record stores"],
+    "avoid": ["crowded tourist attractions"],
+    "budget": null,
+    "max_travel_minutes": 30
+  },
+  "5": {
+    "interests": ["kayaking", "waterfalls", "camping"],
+    "avoid": ["expensive restaurants"],
+    "budget": "moderate",
+    "max_travel_minutes": 90
+  },
+  "6": {
+    "interests": ["museums", "street food", "photography"],
+    "avoid": ["shopping malls", "nightclubs"],
+    "budget": "cheap",
+    "max_travel_minutes": 45
+  },
+  "7": {
+    "interests": ["theme parks", "aquariums", "ice cream shops"],
+    "avoid": ["art galleries"],
+    "budget": null,
+    "max_travel_minutes": 25
+  },
+  "8": {
+    "interests": ["fine dining", "spas", "luxury hotels"],
+    "avoid": ["hiking", "camping"],
+    "budget": "expensive",
+    "max_travel_minutes": 30
+  },
+  "9": {
+    "interests": ["basketball", "local food", "parks"],
+    "avoid": ["long guided tours"],
+    "budget": "cheap",
+    "max_travel_minutes": null
+  },
+  "10": {
+    "interests": ["farmers markets", "bakeries", "scenic drives"],
+    "avoid": ["busy downtown areas"],
+    "budget": null,
+    "max_travel_minutes": 60
+  }
+}

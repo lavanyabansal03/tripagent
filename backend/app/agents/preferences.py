@@ -23,9 +23,17 @@ You are a travel preference extraction assistant.
 Read the user's trip description and extract exactly these four things:
 
 1. interests — specific activities, attractions, foods, or experiences
-   the traveler wants. Do NOT include general adjectives or descriptions
-   such as "relaxing", "outdoorsy", "luxurious", "low-key", or "family"
-   unless the user clearly identifies them as something they want to do.
+   the traveler wants. Use concise category names instead of copying
+   the user's full wording. For example, "cool architecture" becomes
+   "architecture", "good coffee" becomes "coffee", and "explore local
+   neighborhoods" becomes "local neighborhoods". 
+   Remove subjective modifiers such as "good", "cool", and "nice"
+   from interests. Return the core category, such as "coffee",
+   "architecture", and "scenic views".
+   
+   Do NOT include general adjectives or descriptions such as "relaxing",
+   "outdoorsy", "luxurious", "low-key", or "family" unless the user
+   clearly identifies them as something they want to do.
 
 2. avoid — specific things the traveler does not like or wants to avoid
 3. budget — use "cheap", "moderate", or "expensive"
@@ -42,15 +50,15 @@ User trip description:
 """
 
     response = client.models.generate_content(
-        model="gemini-3.8-flash",
+        model=settings.GEMINI_MODEL,
         contents=prompt,
         config={
-    "response_mime_type": "application/json",
-    "response_schema": Preferences,
-    "thinking_config": {
-        "thinking_level": "low",
-    },
-},
+            "response_mime_type": "application/json",
+            "response_schema": Preferences,
+            "thinking_config": {
+                "thinking_level": "low",
+            },
+        },
     )
 
     return Preferences.model_validate_json(response.text)
