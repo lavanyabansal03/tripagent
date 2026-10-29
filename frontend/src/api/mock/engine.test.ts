@@ -28,14 +28,46 @@ describe('intake (US-17, FR-33)', () => {
     const { requirements } = createTrip({ ...baseInput })
     expect(requirements.interests).toContain('coffee')
     expect(requirements.interests).toContain('bookstores')
-    expect(requirements.provenance['interests.coffee']).toBe('explicit')
-    expect(requirements.provenance.budget).toBe('explicit')
+    expect(requirements.provenance['interests.coffee']).toBe('from_text')
+    expect(requirements.provenance.budget).toBe('from_form')
   })
 
   it('infers the tourist/local ratio from "places locals enjoy"', () => {
     const { requirements } = createTrip({ ...baseInput })
     expect(requirements.tourist_local_ratio).toBe(80)
     expect(requirements.provenance.tourist_local_ratio).toBe('inferred')
+  })
+
+  // F-01: keyword matching must use word boundaries.
+  it('does not extract "food" from the word "Seattle"', () => {
+    const { requirements } = createTrip({
+      ...baseInput,
+      destination: 'Seattle',
+      free_text: 'First time in Seattle. I love coffee, bookstores and photography, want places locals enjoy.',
+    })
+    expect(requirements.interests).not.toContain('food')
+    expect(requirements.interests).toEqual(
+      expect.arrayContaining(['coffee', 'bookstores', 'photography']),
+    )
+  })
+
+  // F-01: form choices vs untouched defaults vs typed values.
+  it('labels form choices, untouched defaults and typed values correctly', () => {
+    const untouched = createTrip({ ...baseInput, touched: [], free_text: '' }).requirements
+    expect(untouched.provenance.mode).toBe('default')
+    expect(untouched.provenance.pace).toBe('default')
+
+    const chosen = createTrip({ ...baseInput, touched: ['mode', 'pace'], free_text: '' }).requirements
+    expect(chosen.provenance.mode).toBe('from_form')
+    expect(chosen.provenance.pace).toBe('from_form')
+
+    const typed = createTrip({
+      ...baseInput,
+      touched: [],
+      free_text: 'I would rather not travel more than 30 minutes between stops.',
+    }).requirements
+    expect(typed.max_travel_min).toBe(30)
+    expect(typed.provenance.max_travel_min).toBe('from_text')
   })
 
   it('asks a clarification question when the form contradicts the text (FR-34)', () => {

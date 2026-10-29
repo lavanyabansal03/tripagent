@@ -666,3 +666,15 @@ The items below require agreement or implementation work; their presence does **
 4. **Splurge linkage:** When converting a `MustDo` into a scheduled `Activity`, copy `splurge`; if discovery cannot identify the requested place, request clarification rather than inventing a match.
 5. **Timezone:** Generate destination-local times using the destination’s timezone rules and serialize activity timestamps with the correct offset for each date.
 6. **Provider limitations:** Structured opening hours may be unavailable from external tools; keep `hours: null` and produce `data-gap` rather than invent hours.
+7. **Preference provenance values (proposed, F-01):** The frontend (PR #6) distinguishes where a user preference came from with four values, and the UI shows one label per field:
+
+   | Value | Meaning | UI label |
+   |-------|---------|----------|
+   | `from_text` | The traveller wrote it in "Tell us more" | From your note |
+   | `from_form` | The traveller picked or typed it in the form | You chose this |
+   | `inferred` | We guessed it from another signal (e.g. "locals enjoy" → 80% local) | We guessed this from your note. Tap to change. |
+   | `default` | We assumed it; the traveller never chose it | We assumed this. Tap to change. |
+
+   - Proposal: replace `explicit` in `Provenance` for `TripRequirements.provenance` with `from_text | from_form`. `explicit` currently covers both cases.
+   - Still `explicit | inferred | default` today: `backend/app/models/trip_requirements.py` and `backend/app/api/trips.py`. Until the backend changes, the UI shows `explicit` as `from_form`.
+   - `Place.field_provenance` keeps its own values. It records whether a provider supplied a field, not where a user preference came from.
