@@ -1,4 +1,7 @@
+import time
+
 from google import genai
+from google.genai import errors
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -41,24 +44,39 @@ Read the user's trip description and extract exactly these four things:
    wants to travel between activities
 
 Only extract information that is actually stated or clearly implied.
-Do not invent preferences. Preserve meaningful descriptive words from the
-user's wording, such as "great food", instead of unnecessarily shortening
-them to "food".
+Do not invent preferences.
 
 User trip description:
 {trip_description}
 """
 
-    response = client.models.generate_content(
-        model=settings.GEMINI_MODEL,
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-            "response_schema": Preferences,
-            "thinking_config": {
-                "thinking_level": "low",
-            },
+    config = {
+        "response_mime_type": "application/json",
+        "response_schema": Preferences,
+        "thinking_config": {
+            "thinking_level": "low",
         },
+    }
+    response = call_with_retry(
+        lambda: client.models.generate_content(
+            model=settings.GEMINI_MODEL, contents=prompt, config=config
+        )
     )
 
     return Preferences.model_validate_json(response.text)
+
+
+# Gemini answers 429 (too many requests) or 503 (busy) on the free tier.
+RETRY_CODES = {429, 503}
+MAX_TRIES = 4
+
+
+def call_with_retry(call, sleep=time.sleep):
+    """Run call(); on 429/503 wait 2, 4, 8 seconds and try again (MAX_TRIES in total)."""
+    for attempt in range(MAX_TRIES):
+        try:
+            return call()
+        except errors.APIError as error:
+            if error.code not in RETRY_CODES or attempt == MAX_TRIES - 1:
+                raise
+            sleep(2 ** (attempt + 1))
