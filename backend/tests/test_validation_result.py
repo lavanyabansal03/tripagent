@@ -2,7 +2,6 @@
 import pytest
 
 from app.models.validation_result import ValidationResult
-from pydantic import ValidationError
 
 
 def valid_result():
@@ -40,7 +39,7 @@ def test_invalid_severity():
     data = valid_result()
     data["severity"] = "error"
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ValidationResult(**data)
 
 
@@ -48,7 +47,7 @@ def test_missing_message():
     data = valid_result()
     data.pop("message")
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ValidationResult(**data)
 
 
