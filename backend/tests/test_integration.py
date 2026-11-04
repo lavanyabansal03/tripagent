@@ -45,7 +45,7 @@ def test_models_work_with_validators():
     budget_result = check_budget(activities, 200, "strict")
 
     assert overlap_result is True
-    assert budget_result["valid"] is True
+    assert budget_result.passed is True
     assert budget_result["regular_total"] == 100
     assert budget_result["splurge_total"] == 400
     assert budget_result["overall_total"] == 500
