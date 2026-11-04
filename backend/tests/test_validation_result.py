@@ -1,5 +1,5 @@
-
 import pytest
+
 from app.models.validation_result import ValidationResult
 
 
