@@ -42,10 +42,24 @@ def test_models_work_with_validators():
         second.model_dump(mode="json"),
     ]
 
-    overlap_result = check_overlap(activities)
-    budget_result = check_budget(activities, 200, "strict")
+    overlap_result = check_overlap(
+        activities,
+        trip_id="trip_001",
+        version=1,
+    )
 
-    assert overlap_result is True
+    budget_result = check_budget(
+        activities,
+        200,
+        "strict",
+        trip_id="trip_001",
+        version=1,
+    )
+
+    assert isinstance(overlap_result, ValidationResult)
+    assert overlap_result.rule == "overlap"
+    assert overlap_result.passed is True
+    assert overlap_result.severity == "soft"
 
     assert isinstance(budget_result, ValidationResult)
     assert budget_result.rule == "budget"
@@ -55,4 +69,3 @@ def test_models_work_with_validators():
     assert "Regular cost: $100" in budget_result.message
     assert "splurges: $400" in budget_result.message
     assert "total: $500" in budget_result.message
-
