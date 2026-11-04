@@ -1,10 +1,12 @@
+
 import pytest
 
+from app.models.validation_result import ValidationResult
 from app.validation.opening_hours import check_opening_hours
 
 
-def test_place_open():
-    hours = [
+def monday_hours():
+    return [
         {
             "day": "monday",
             "open": "09:00",
@@ -12,31 +14,30 @@ def test_place_open():
         }
     ]
 
+
+def test_place_open():
     result = check_opening_hours(
         "2026-11-09T10:00:00-08:00",
         "2026-11-09T12:00:00-08:00",
-        hours,
+        monday_hours(),
     )
 
-    assert result == "passed"
+    assert isinstance(result, ValidationResult)
+    assert result.rule == "opening_hours"
+    assert result.passed is True
+    assert result.severity == "soft"
 
 
 def test_place_closed():
-    hours = [
-        {
-            "day": "monday",
-            "open": "09:00",
-            "close": "17:00",
-        }
-    ]
-
     result = check_opening_hours(
         "2026-11-09T16:00:00-08:00",
         "2026-11-09T18:00:00-08:00",
-        hours,
+        monday_hours(),
     )
 
-    assert result == "failed"
+    assert result.passed is False
+    assert result.severity == "hard"
+    assert "outside" in result.message
 
 
 def test_overnight_opening_hours():
@@ -55,7 +56,7 @@ def test_overnight_opening_hours():
         hours,
     )
 
-    assert result == "passed"
+    assert result.passed is True
 
 
 def test_unknown_hours():
@@ -65,7 +66,8 @@ def test_unknown_hours():
         None,
     )
 
-    assert result == "unknown"
+    assert result.passed is False
+    assert result.severity == "data-gap"
 
 
 def test_invalid_activity_time():
@@ -75,3 +77,39 @@ def test_invalid_activity_time():
             "2026-11-09T10:00:00-08:00",
             [],
         )
+
+
+def test_activity_identifiers():
+    result = check_opening_hours(
+        "2026-11-09T10:00:00-08:00",
+        "2026-11-09T12:00:00-08:00",
+        monday_hours(),
+        trip_id="T001",
+        version=2,
+        activity_id="A001",
+    )
+
+    assert result.trip_id == "T001"
+    assert result.version == 2
+    assert result.activity_ids == ["A001"]
+
+
+def test_empty_hours_means_closed():
+    result = check_opening_hours(
+        "2026-11-09T10:00:00-08:00",
+        "2026-11-09T12:00:00-08:00",
+        [],
+    )
+
+    assert result.passed is False
+    assert result.severity == "hard"
+
+
+def test_activity_exactly_within_hours():
+    result = check_opening_hours(
+        "2026-11-09T09:00:00-08:00",
+        "2026-11-09T17:00:00-08:00",
+        monday_hours(),
+    )
+
+    assert result.passed is True
