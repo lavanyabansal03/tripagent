@@ -59,6 +59,22 @@ npm run dev
 
 Open http://localhost:5173. It should say **Backend: connected** while the backend is running.
 
+## LangGraph learning demo
+
+The API is available in `/docs` and follows the Svelte client's trip/run contract:
+
+- `POST /api/trips` creates a trip and returns `{trip, requirements, questions}`. Missing dates are
+	returned as typed clarification questions.
+- `POST /api/trips/{id}/answers` accepts `{ "answers": { ... } }` and returns updated requirements.
+- `POST /api/trips/{id}/plan` starts the graph and returns `{ "run_id": "..." }`.
+- `GET /api/runs/{run_id}` returns the run's polling status.
+- `GET /api/trips/{id}/trace` returns the run's `ExecutionEvent` records.
+
+Place search and saving each retry up to three times, then stop with an explanation. Graph loop
+limits are configured in `backend/app/config.py`. The separate teaching example is
+`app.graph.retry_example.run_retry_example()`. Search results and graph checkpoints are
+demo-only/in-memory; no external place service or durable database is connected yet.
+
 ## Run tests
 ```bash
 # Backend (from backend/, with the venv active)
