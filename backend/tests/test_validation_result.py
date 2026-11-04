@@ -1,8 +1,7 @@
 import pytest
-from pydantic import ValidationError
 
 from app.models.validation_result import ValidationResult
-
+from pydantic import ValidationError
 
 def valid_result():
     return {
