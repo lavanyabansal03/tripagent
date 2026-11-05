@@ -91,9 +91,23 @@ def test_preference_examples_live():
         expected = expected_answers[str(number)]
         result = extract_preferences(description)
 
-        assert result.budget == expected["budget"], f"Example {number}: budget"
-        assert result.max_travel_minutes == expected["max_travel_minutes"], (
+        assert result is not None, f"Example {number}: no result"
+
+        assert result.budget_level == expected["budget_level"], (
+            f"Example {number}: budget level"
+        )
+        assert result.budget_min == expected["budget_min"], (
+            f"Example {number}: minimum budget"
+        )
+        assert result.budget_max == expected["budget_max"], (
+            f"Example {number}: maximum budget"
+        )
+        assert result.max_travel_min == expected["max_travel_min"], (
             f"Example {number}: travel time"
         )
-        assert set(result.interests) == set(expected["interests"]), f"Example {number}: interests"
-        assert set(result.avoid) == set(expected["avoid"]), f"Example {number}: avoid"
+        assert set(result.interests) == set(expected["interests"]), (
+            f"Example {number}: interests"
+        )
+        assert set(result.avoid) == set(expected["avoid"]), (
+            f"Example {number}: avoid"
+        )
