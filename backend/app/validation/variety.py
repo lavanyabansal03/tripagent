@@ -1,4 +1,6 @@
 
+from datetime import datetime
+
 from app.models.validation_result import ValidationResult
 
 
@@ -19,9 +21,13 @@ def check_variety(
         if activity.get("status") != "cancelled"
     ]
 
-    active.sort(key=lambda activity: activity["start"])
+    # Sort by real time, not text, so different UTC offsets order correctly.
+    active.sort(
+        key=lambda activity: datetime.fromisoformat(activity["start"])
+    )
 
-    previous_type = None
+    # Types shared by every activity in the current run of activities.
+    shared_types = set()
     consecutive = []
     conflicting_ids = []
     missing_ids = []
@@ -29,30 +35,29 @@ def check_variety(
 
     for activity in active:
         place = activity.get("place") or {}
-        types = place.get("experience_types") or []
+        # Use every type a place has ("food, nightlife"), not just the first.
+        current_types = {
+            str(experience_type).strip().lower()
+            for experience_type in place.get("experience_types") or []
+            if experience_type is not None and str(experience_type).strip()
+        }
 
-        current_type = (
-            str(types[0]).strip().lower()
-            if types and types[0] is not None
-            else None
-        )
-
-        if not current_type:
+        if not current_types:
             activity_id = activity.get("id")
 
             if activity_id is not None:
                 missing_ids.append(activity_id)
 
-            previous_type = None
+            shared_types = set()
             consecutive = []
             continue
 
-        if current_type == previous_type:
+        if shared_types & current_types:
+            shared_types &= current_types
             consecutive.append(activity)
         else:
+            shared_types = current_types
             consecutive = [activity]
-
-        previous_type = current_type
 
         if len(consecutive) == max_consecutive + 1:
             conflict_count += 1

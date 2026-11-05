@@ -375,6 +375,8 @@ The ValidationResult model records the outcome of validation checks.
 
 Unknown information must not be marked as a confirmed pass.
 
+When `passed` is `true`, `severity` is always `soft` and carries no meaning. Read `severity` only when `passed` is `false`.
+
 ### Example ValidationResult
 
 ```json

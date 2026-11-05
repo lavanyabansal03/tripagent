@@ -35,7 +35,8 @@ def check_opening_hours(
             activity_ids=activity_ids,
         )
 
-    if hours is None:
+    # No hours (None or an empty list) means we don't know, not "closed".
+    if not hours:
         return make_result(
             False,
             "data-gap",
@@ -100,3 +101,59 @@ def check_opening_hours(
         "hard",
         "Activity is scheduled outside the place's opening hours.",
     )
+
+
+def check_plan_opening_hours(activities, trip_id="unknown", version=0):
+    """Check every activity in a plan against its place's opening hours."""
+    closed = []
+    unknown = []
+
+    for activity in activities:
+        if activity.get("status") == "cancelled":
+            continue
+
+        place = activity.get("place") or {}
+        result = check_opening_hours(
+            activity["start"],
+            activity["end"],
+            place.get("hours"),
+            trip_id=trip_id,
+            version=version,
+            activity_id=activity.get("id"),
+        )
+
+        if result.severity == "hard":
+            closed.append(result)
+        elif result.severity == "data-gap":
+            unknown.append(result)
+
+    def make_result(passed, severity, message, results=()):
+        activity_ids = [aid for result in results for aid in result.activity_ids]
+        return ValidationResult(
+            id="opening-hours-check",
+            trip_id=trip_id,
+            version=version,
+            rule="opening_hours",
+            passed=passed,
+            severity=severity,
+            message=message,
+            activity_ids=activity_ids,
+        )
+
+    if closed:
+        return make_result(
+            False,
+            "hard",
+            f"{len(closed)} activities are scheduled outside opening hours.",
+            closed,
+        )
+
+    if unknown:
+        return make_result(
+            False,
+            "data-gap",
+            f"Opening hours are unavailable for {len(unknown)} activities.",
+            unknown,
+        )
+
+    return make_result(True, "soft", "All places are open for their activities.")
