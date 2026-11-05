@@ -1,9 +1,15 @@
-def check_variety(activities, max_consecutive=2):
-    """
-    Detect too many consecutive activities of the same type.
 
-    Returns warnings containing the affected activity IDs.
-    """
+from app.models.validation_result import ValidationResult
+
+
+def check_variety(
+    activities,
+    max_consecutive=2,
+    trip_id="unknown",
+    version=0,
+):
+    """Check consecutive activities for repetitive experience types."""
+
     if max_consecutive < 1:
         raise ValueError("max_consecutive must be at least 1")
 
@@ -13,21 +19,30 @@ def check_variety(activities, max_consecutive=2):
         if activity.get("status") != "cancelled"
     ]
 
-    # Arrange activities chronologically.
     active.sort(key=lambda activity: activity["start"])
 
-    warnings = []
     previous_type = None
     consecutive = []
+    conflicting_ids = []
+    missing_ids = []
+    conflict_count = 0
 
     for activity in active:
         place = activity.get("place") or {}
         types = place.get("experience_types") or []
 
-        # Unknown categories cannot be checked reliably.
-        current_type = types[0].lower() if types else None
+        current_type = (
+            str(types[0]).strip().lower()
+            if types and types[0] is not None
+            else None
+        )
 
-        if current_type is None:
+        if not current_type:
+            activity_id = activity.get("id")
+
+            if activity_id is not None:
+                missing_ids.append(activity_id)
+
             previous_type = None
             consecutive = []
             continue
@@ -40,16 +55,64 @@ def check_variety(activities, max_consecutive=2):
         previous_type = current_type
 
         if len(consecutive) == max_consecutive + 1:
-            warnings.append({
-                "passed": False,
-                "severity": "warning",
-                "activity_ids": [
-                    item.get("id") for item in consecutive
-                ],
-                "message": (
-                    f"More than {max_consecutive} consecutive "
-                    f"activities have type '{current_type}'"
-                ),
-            })
+            conflict_count += 1
 
-    return warnings
+            for item in consecutive:
+                activity_id = item.get("id")
+
+                if (
+                    activity_id is not None
+                    and activity_id not in conflicting_ids
+                ):
+                    conflicting_ids.append(activity_id)
+
+        elif len(consecutive) > max_consecutive + 1:
+            activity_id = activity.get("id")
+
+            if (
+                activity_id is not None
+                and activity_id not in conflicting_ids
+            ):
+                conflicting_ids.append(activity_id)
+
+    if conflict_count:
+        return ValidationResult(
+            id="variety-check",
+            trip_id=trip_id,
+            version=version,
+            rule="variety",
+            passed=False,
+            severity="soft",
+            message=(
+                f"Found {conflict_count} sequences with more than "
+                f"{max_consecutive} consecutive activities "
+                "of the same experience type."
+            ),
+            activity_ids=conflicting_ids,
+        )
+
+    if missing_ids:
+        return ValidationResult(
+            id="variety-check",
+            trip_id=trip_id,
+            version=version,
+            rule="variety",
+            passed=False,
+            severity="data-gap",
+            message=(
+                "Cannot fully check activity variety because "
+                "some activities have no experience type."
+            ),
+            activity_ids=list(dict.fromkeys(missing_ids)),
+        )
+
+    return ValidationResult(
+        id="variety-check",
+        trip_id=trip_id,
+        version=version,
+        rule="variety",
+        passed=True,
+        severity="soft",
+        message="Activity variety check passed.",
+        activity_ids=[],
+    )

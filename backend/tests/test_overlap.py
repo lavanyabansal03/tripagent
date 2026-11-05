@@ -1,79 +1,138 @@
+
+from app.models.validation_result import ValidationResult
 from app.validation.overlap import check_overlap, find_overlaps
 
 
-# Test 1: Activities do not overlap
+def make_activity(activity_id, start, end, status="planned"):
+    return {
+        "id": activity_id,
+        "start": start,
+        "end": end,
+        "status": status,
+    }
+
+
 def test_no_overlap():
     activities = [
-        {
-            "start": "2026-11-10T09:00:00",
-            "end": "2026-11-10T10:00:00",
-            "status": "scheduled",
-        },
-        {
-            "start": "2026-11-10T10:00:00",
-            "end": "2026-11-10T11:00:00",
-            "status": "scheduled",
-        },
+        make_activity(
+            "A",
+            "2026-11-10T09:00:00",
+            "2026-11-10T10:00:00",
+        ),
+        make_activity(
+            "B",
+            "2026-11-10T10:00:00",
+            "2026-11-10T11:00:00",
+        ),
     ]
 
-    assert check_overlap(activities) is True
+    result = check_overlap(activities)
+
+    assert isinstance(result, ValidationResult)
+    assert result.rule == "overlap"
+    assert result.passed is True
+    assert result.severity == "soft"
+    assert result.activity_ids == []
 
 
-# Test 2: Activities overlap
 def test_overlap_detected():
     activities = [
-        {
-            "start": "2026-11-10T09:00:00",
-            "end": "2026-11-10T11:00:00",
-            "status": "scheduled",
-        },
-        {
-            "start": "2026-11-10T10:00:00",
-            "end": "2026-11-10T12:00:00",
-            "status": "scheduled",
-        },
+        make_activity(
+            "A",
+            "2026-11-10T09:00:00",
+            "2026-11-10T11:00:00",
+        ),
+        make_activity(
+            "B",
+            "2026-11-10T10:00:00",
+            "2026-11-10T12:00:00",
+        ),
     ]
 
-    assert check_overlap(activities) is False
+    result = check_overlap(activities)
+
+    assert result.passed is False
+    assert result.severity == "hard"
+    assert result.activity_ids == ["A", "B"]
+    assert "1 overlapping activity pairs" in result.message
 
 
-# Test 3: Cancelled activities are ignored
 def test_cancelled_activity_ignored():
     activities = [
-        {
-            "start": "2026-11-10T09:00:00",
-            "end": "2026-11-10T11:00:00",
-            "status": "cancelled",
-        },
-        {
-            "start": "2026-11-10T10:00:00",
-            "end": "2026-11-10T12:00:00",
-            "status": "scheduled",
-        },
+        make_activity(
+            "A",
+            "2026-11-10T09:00:00",
+            "2026-11-10T11:00:00",
+            "cancelled",
+        ),
+        make_activity(
+            "B",
+            "2026-11-10T10:00:00",
+            "2026-11-10T12:00:00",
+        ),
     ]
 
-    assert check_overlap(activities) is True
+    result = check_overlap(activities)
+
+    assert result.passed is True
 
 
-# Test 4: Identify which activities overlap
 def test_find_overlapping_activity_ids():
     activities = [
-        {
-            "id": "A",
-            "start": "2026-11-10T09:00:00",
-            "end": "2026-11-10T11:00:00",
-            "status": "planned",
-        },
-        {
-            "id": "B",
-            "start": "2026-11-10T10:00:00",
-            "end": "2026-11-10T12:00:00",
-            "status": "planned",
-        },
+        make_activity(
+            "A",
+            "2026-11-10T09:00:00",
+            "2026-11-10T11:00:00",
+        ),
+        make_activity(
+            "B",
+            "2026-11-10T10:00:00",
+            "2026-11-10T12:00:00",
+        ),
     ]
 
     conflicts = find_overlaps(activities)
 
     assert len(conflicts) == 1
-    assert conflicts[0]["activity_ids"] == ["A", "B"]
-    assert conflicts[0]["passed"] is False
+    assert isinstance(conflicts[0], ValidationResult)
+    assert conflicts[0].activity_ids == ["A", "B"]
+    assert conflicts[0].passed is False
+    assert conflicts[0].severity == "hard"
+
+
+def test_multiple_overlaps():
+    activities = [
+        make_activity(
+            "A",
+            "2026-11-10T09:00:00",
+            "2026-11-10T12:00:00",
+        ),
+        make_activity(
+            "B",
+            "2026-11-10T10:00:00",
+            "2026-11-10T11:00:00",
+        ),
+        make_activity(
+            "C",
+            "2026-11-10T10:30:00",
+            "2026-11-10T13:00:00",
+        ),
+    ]
+
+    conflicts = find_overlaps(activities)
+    result = check_overlap(activities)
+
+    assert len(conflicts) == 3
+    assert result.passed is False
+    assert result.activity_ids == ["A", "B", "C"]
+
+
+def test_trip_identifiers():
+    result = check_overlap(
+        [],
+        trip_id="T001",
+        version=2,
+    )
+
+    assert result.trip_id == "T001"
+    assert result.version == 2

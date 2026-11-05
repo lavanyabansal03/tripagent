@@ -1,20 +1,19 @@
+
 from datetime import datetime, timedelta
 
 from app.models.place import OpeningPeriod
+from app.models.validation_result import ValidationResult
 
 
-def check_opening_hours(start, end, hours):
-    """
-    Check whether an activity is scheduled during opening hours.
-
-    Returns:
-        "passed"  - Place is open for the entire activity.
-        "failed"  - Activity is outside opening hours.
-        "unknown" - Opening hours are unavailable.
-    """
-
-    if hours is None:
-        return "unknown"
+def check_opening_hours(
+    start,
+    end,
+    hours,
+    trip_id="unknown",
+    version=0,
+    activity_id=None,
+):
+    """Check an activity against a place's opening hours."""
 
     start = datetime.fromisoformat(start) if isinstance(start, str) else start
     end = datetime.fromisoformat(end) if isinstance(end, str) else end
@@ -22,18 +21,36 @@ def check_opening_hours(start, end, hours):
     if start >= end:
         raise ValueError("Activity must end after it starts")
 
-    # Convert opening-hour records into OpeningPeriod objects
+    activity_ids = [activity_id] if activity_id is not None else []
+
+    def make_result(passed, severity, message):
+        return ValidationResult(
+            id="opening-hours-check",
+            trip_id=trip_id,
+            version=version,
+            rule="opening_hours",
+            passed=passed,
+            severity=severity,
+            message=message,
+            activity_ids=activity_ids,
+        )
+
+    if hours is None:
+        return make_result(
+            False,
+            "data-gap",
+            "Opening hours are unavailable.",
+        )
+
     periods = [
-        period if isinstance(period, OpeningPeriod)
+        period
+        if isinstance(period, OpeningPeriod)
         else OpeningPeriod.model_validate(period)
         for period in hours
     ]
 
-    # Check both the activity's date and the previous date
-    # to support places that stay open past midnight.
     current_date = start.date() - timedelta(days=1)
     last_date = end.date()
-
     intervals = []
 
     while current_date <= last_date:
@@ -61,7 +78,6 @@ def check_opening_hours(start, end, hours):
 
         current_date += timedelta(days=1)
 
-    # Sort opening intervals and check continuous coverage.
     intervals.sort(key=lambda interval: interval[0])
     covered_until = start
 
@@ -73,6 +89,14 @@ def check_opening_hours(start, end, hours):
             covered_until = closing
 
         if covered_until >= end:
-            return "passed"
+            return make_result(
+                True,
+                "soft",
+                "Place is open for the entire activity.",
+            )
 
-    return "failed"
+    return make_result(
+        False,
+        "hard",
+        "Activity is scheduled outside the place's opening hours.",
+    )

@@ -1,109 +1,191 @@
+
+from app.models.validation_result import ValidationResult
 from app.validation.avoid import check_avoid_list
+
+
+def make_activity(
+    activity_id,
+    name,
+    categories=None,
+    experience_types=None,
+    status="planned",
+):
+    return {
+        "id": activity_id,
+        "status": status,
+        "place": {
+            "name": name,
+            "categories": categories or [],
+            "experience_types": experience_types or [],
+        },
+    }
 
 
 def test_avoid_museum():
     activities = [
-        {
-            "id": "activity_001",
-            "status": "planned",
-            "place": {
-                "name": "Art Museum",
-                "categories": ["museum"],
-                "experience_types": ["culture"],
-            },
-        }
+        make_activity("A001", "Art Museum", ["museum"])
     ]
 
-    conflicts = check_avoid_list(activities, ["museum"])
+    result = check_avoid_list(activities, ["museum"])
 
-    assert len(conflicts) == 1
-    assert conflicts[0]["passed"] is False
-    assert conflicts[0]["activity_ids"] == ["activity_001"]
+    assert isinstance(result, ValidationResult)
+    assert result.rule == "avoid"
+    assert result.passed is False
+    assert result.severity == "hard"
+    assert result.activity_ids == ["A001"]
 
 
 def test_no_avoid_conflict():
     activities = [
-        {
-            "id": "activity_002",
-            "status": "planned",
-            "place": {
-                "name": "City Park",
-                "categories": ["park"],
-                "experience_types": ["nature"],
-            },
-        }
+        make_activity("A002", "City Park", ["park"])
     ]
 
-    conflicts = check_avoid_list(activities, ["museum"])
+    result = check_avoid_list(activities, ["museum"])
 
-    assert conflicts == []
+    assert result.passed is True
+    assert result.activity_ids == []
 
 
 def test_empty_avoid_list():
     activities = [
-        {
-            "id": "activity_003",
-            "status": "planned",
-            "place": {"name": "Art Museum"},
-        }
+        make_activity("A003", "Art Museum")
     ]
 
-    assert check_avoid_list(activities, []) == []
+    result = check_avoid_list(activities, [])
+
+    assert result.passed is True
 
 
 def test_cancelled_activity_ignored():
     activities = [
-        {
-            "id": "activity_004",
-            "status": "cancelled",
-            "place": {"name": "Art Museum"},
-        }
+        make_activity(
+            "A004",
+            "Art Museum",
+            status="cancelled",
+        )
     ]
 
-    assert check_avoid_list(activities, ["museum"]) == []
+    result = check_avoid_list(activities, ["museum"])
+
+    assert result.passed is True
 
 
 def test_missing_categories():
     activities = [
-        {
-            "id": "activity_005",
-            "status": "planned",
-            "place": {"name": "Coffee Shop"},
-        }
+        make_activity("A005", "Coffee Shop")
     ]
 
-    assert check_avoid_list(activities, ["museum"]) == []
+    result = check_avoid_list(activities, ["museum"])
+
+    assert result.passed is True
 
 
 def test_case_insensitive_matching():
     activities = [
-        {
-            "id": "activity_006",
-            "status": "planned",
-            "place": {
-                "name": "Seattle Aquarium",
-                "categories": ["AQUARIUM"],
-            },
-        }
+        make_activity(
+            "A006",
+            "Seattle Aquarium",
+            ["AQUARIUM"],
+        )
     ]
 
-    conflicts = check_avoid_list(activities, ["Aquarium"])
+    result = check_avoid_list(activities, ["Aquarium"])
 
-    assert len(conflicts) == 1
+    assert result.passed is False
+    assert result.severity == "hard"
+
 
 def test_plural_avoid_preference():
     activities = [
+        make_activity("A007", "Art Museum", ["museum"])
+    ]
+
+    result = check_avoid_list(activities, ["museums"])
+
+    assert result.passed is False
+    assert result.activity_ids == ["A007"]
+
+
+def test_bar_does_not_match_barnes():
+    activities = [
+        make_activity("A008", "Barnes & Noble")
+    ]
+
+    result = check_avoid_list(activities, ["bar"])
+
+    assert result.passed is True
+
+
+def test_bar_matches_whole_word():
+    activities = [
+        make_activity("A009", "Rooftop Bar")
+    ]
+
+    result = check_avoid_list(activities, ["bar"])
+
+    assert result.passed is False
+    assert result.activity_ids == ["A009"]
+
+
+def test_coffee_shop_phrase():
+    activities = [
+        make_activity("A010", "Downtown Coffee Shop")
+    ]
+
+    result = check_avoid_list(activities, ["coffee shop"])
+
+    assert result.passed is False
+
+
+def test_phrase_must_be_consecutive():
+    activities = [
+        make_activity("A011", "Coffee Roastery and Gift Shop")
+    ]
+
+    result = check_avoid_list(activities, ["coffee shop"])
+
+    assert result.passed is True
+
+
+def test_multiple_conflicts():
+    activities = [
+        make_activity("A012", "Art Museum"),
+        make_activity("A013", "Rooftop Bar"),
+    ]
+
+    result = check_avoid_list(
+        activities,
+        ["museum", "bar"],
+    )
+
+    assert result.passed is False
+    assert result.severity == "hard"
+    assert result.activity_ids == ["A012", "A013"]
+
+
+def test_missing_place_information():
+    activities = [
         {
-            "id": "activity_007",
+            "id": "A014",
             "status": "planned",
-            "place": {
-                "name": "Art Museum",
-                "categories": ["museum"],
-            },
+            "place": None,
         }
     ]
 
-    conflicts = check_avoid_list(activities, ["museums"])
+    result = check_avoid_list(activities, ["museum"])
 
-    assert len(conflicts) == 1
-    assert conflicts[0]["activity_ids"] == ["activity_007"]
+    assert result.passed is False
+    assert result.severity == "data-gap"
+    assert result.activity_ids == ["A014"]
+
+
+def test_trip_identifiers():
+    result = check_avoid_list(
+        [],
+        ["museum"],
+        trip_id="T001",
+        version=2,
+    )
+
+    assert result.trip_id == "T001"
+    assert result.version == 2

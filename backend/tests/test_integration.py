@@ -1,4 +1,6 @@
+
 from app.models.activity import Activity
+from app.models.validation_result import ValidationResult
 from app.validation.budget import check_budget
 from app.validation.overlap import check_overlap
 
@@ -35,17 +37,35 @@ def test_models_work_with_validators():
         splurge=True,
     )
 
-    # Convert Pydantic objects into dictionaries
     activities = [
         first.model_dump(mode="json"),
         second.model_dump(mode="json"),
     ]
 
-    overlap_result = check_overlap(activities)
-    budget_result = check_budget(activities, 200, "strict")
+    overlap_result = check_overlap(
+        activities,
+        trip_id="trip_001",
+        version=1,
+    )
 
-    assert overlap_result is True
-    assert budget_result["valid"] is True
-    assert budget_result["regular_total"] == 100
-    assert budget_result["splurge_total"] == 400
-    assert budget_result["overall_total"] == 500
+    budget_result = check_budget(
+        activities,
+        200,
+        "strict",
+        trip_id="trip_001",
+        version=1,
+    )
+
+    assert isinstance(overlap_result, ValidationResult)
+    assert overlap_result.rule == "overlap"
+    assert overlap_result.passed is True
+    assert overlap_result.severity == "soft"
+
+    assert isinstance(budget_result, ValidationResult)
+    assert budget_result.rule == "budget"
+    assert budget_result.passed is True
+    assert budget_result.severity == "soft"
+
+    assert "Regular cost: $100" in budget_result.message
+    assert "splurges: $400" in budget_result.message
+    assert "total: $500" in budget_result.message
