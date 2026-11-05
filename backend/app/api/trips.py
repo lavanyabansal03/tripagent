@@ -5,7 +5,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.graph.trip_planner import build_trip_graph
 
@@ -29,6 +29,18 @@ class TripRequest(BaseModel):
     avoid: list[str] = Field(default_factory=list)
     tourist_local_ratio: int = Field(default=50, ge=0, le=100)
     free_text: str = ""
+
+    @model_validator(mode="after")
+    def validate_trip_dates(self) -> "TripRequest":
+        if self.start_date or self.end_date:
+            try:
+                start = datetime.fromisoformat(self.start_date).date() if self.start_date else None
+                end = datetime.fromisoformat(self.end_date).date() if self.end_date else None
+            except ValueError as error:
+                raise ValueError("Trip dates must use YYYY-MM-DD format") from error
+            if start is not None and end is not None and end < start:
+                raise ValueError("End date cannot be before start date")
+        return self
 
 
 class Trip(BaseModel):
@@ -126,8 +138,11 @@ class RunStatus(BaseModel):
 _trips: dict[str, Trip] = {}
 _requirements: dict[str, TripRequirements] = {}
 _questions: dict[str, list[Question]] = {}
+_clarification_rounds: dict[str, int] = {}
+_clarification_exhausted: set[str] = set()
 _runs: dict[str, RunStatus] = {}
 _traces: dict[str, list[ExecutionEvent]] = {}
+_itineraries: dict[str, dict[str, Any]] = {}
 
 
 def _get_trip(trip_id: str) -> Trip:
@@ -200,6 +215,7 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
     _trips[trip_id] = trip
     _requirements[trip_id] = requirements
     _questions[trip_id] = questions
+    _clarification_rounds[trip_id] = 1 if questions else 0
     return CreateTripResponse(trip=trip, requirements=requirements, questions=questions)
 
 
@@ -208,6 +224,8 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
     trip = _get_trip(trip_id)
     requirements = _get_requirements(trip_id)
     questions = _questions.get(trip_id, [])
+    if trip_id in _clarification_exhausted:
+        raise HTTPException(status_code=409, detail="Trip-date clarification limit reached")
     updates: dict[str, str] = {}
 
     for question in questions:
@@ -215,9 +233,28 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
         if answer:
             updates[question.field] = answer
 
+    candidate_start = updates.get("start_date", requirements.start_date)
+    candidate_end = updates.get("end_date", requirements.end_date)
+    if candidate_start or candidate_end:
+        try:
+            start = datetime.fromisoformat(candidate_start).date() if candidate_start else None
+            end = datetime.fromisoformat(candidate_end).date() if candidate_end else None
+        except ValueError as error:
+            raise HTTPException(
+                status_code=422, detail="Trip dates must use YYYY-MM-DD format"
+            ) from error
+        if start is not None and end is not None and end < start:
+            raise HTTPException(status_code=422, detail="End date cannot be before start date")
+
     requirements = requirements.model_copy(update=updates)
     trip = trip.model_copy(update=updates)
     remaining = _questions_for(requirements.start_date, requirements.end_date)
+    if remaining:
+        if _clarification_rounds.get(trip_id, 0) >= 2:
+            remaining = []
+            _clarification_exhausted.add(trip_id)
+        else:
+            _clarification_rounds[trip_id] = _clarification_rounds.get(trip_id, 0) + 1
     _requirements[trip_id] = requirements
     _trips[trip_id] = trip
     _questions[trip_id] = remaining
@@ -228,9 +265,10 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
 def plan_trip(trip_id: str) -> PlanResponse:
     trip = _get_trip(trip_id)
     requirements = _get_requirements(trip_id)
-    if _questions.get(trip_id):
+    if _questions.get(trip_id) or trip_id in _clarification_exhausted:
         raise HTTPException(
-            status_code=409, detail="Answer the trip-date questions before planning"
+            status_code=409,
+            detail="Trip dates are required; the two-round clarification limit was reached",
         )
 
     existing_run_id = next(
@@ -266,6 +304,7 @@ def plan_trip(trip_id: str) -> PlanResponse:
         _trips[trip_id] = _trips[trip_id].model_copy(
             update={"status": "planned", "current_version": 1}
         )
+        _itineraries[trip_id] = result.get("itinerary", {})
     else:
         _trips[trip_id] = _trips[trip_id].model_copy(update={"status": "error"})
     _traces[trip_id] = [ExecutionEvent.model_validate(event) for event in result.get("logs", [])]
@@ -283,9 +322,12 @@ def get_trip_requirements(trip_id: str) -> TripRequirements:
 
 
 @router.get("/{trip_id}/itinerary")
-def get_itinerary(trip_id: str, version: int | None = None) -> None:
+def get_itinerary(trip_id: str, version: int | None = None) -> dict[str, Any] | None:
     _get_trip(trip_id)
-    return None
+    itinerary = _itineraries.get(trip_id)
+    if itinerary is None or (version is not None and version != itinerary.get("version")):
+        return None
+    return itinerary
 
 
 @router.get("/{trip_id}/trace", response_model=list[ExecutionEvent])
