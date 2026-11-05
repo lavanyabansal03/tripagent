@@ -11,11 +11,9 @@ from app.config import settings
 class Preferences(BaseModel):
     interests: list[str] = Field(default_factory=list)
     avoid: list[str] = Field(default_factory=list)
-
     budget_min: float | None = None
     budget_max: float | None = None
     budget_level: Literal["cheap", "moderate", "expensive"] | None = None
-
     max_travel_min: int | None = None
 
 
@@ -54,24 +52,25 @@ User trip description:
 {trip_description}
 """
 
+    config = {
+        "response_mime_type": "application/json",
+        "response_schema": Preferences,
+        "thinking_config": {
+            "thinking_level": "low",
+        },
+    }
+
     response = call_with_retry(
         lambda: client.models.generate_content(
             model=settings.GEMINI_MODEL,
             contents=prompt,
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": Preferences,
-                "thinking_config": {
-                    "thinking_level": "low",
-                },
-            },
+            config=config,
         )
     )
 
     return Preferences.model_validate_json(response.text)
 
 
-# Gemini can return 429 (too many requests) or 503 (busy).
 RETRY_CODES = {429, 503}
 MAX_TRIES = 4
 

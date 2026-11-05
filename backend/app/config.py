@@ -8,6 +8,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
+# Hard caps for graph loops; keep every retry/clarification path bounded.
+MAX_CLARIFICATION_ATTEMPTS = 2
+MAX_FIND_ATTEMPTS = 3
+
 # The .env file lives at the repo root (one level above backend/).
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -19,6 +23,9 @@ class Settings(BaseSettings):
     FOURSQUARE_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./tripagent.db"
     DEMO_MODE: bool = True
+    # Comma-separated browser origins allowed to call the API. Use "*" to allow
+    # any origin (the API has no cookies/auth, so credentials are then disabled).
+    CORS_ORIGINS: str = "http://localhost:5173"
 
 
 settings = Settings()
