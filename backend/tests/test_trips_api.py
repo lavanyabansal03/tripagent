@@ -42,10 +42,18 @@ def test_trip_create_clarify_plan_and_trace_follow_svelte_contract():
     assert run.json()["status"] == "done"
     assert run.json()["terminal"] == "PASS"
 
+    itinerary = client.get(f"/api/trips/{trip_id}/itinerary")
+    assert itinerary.status_code == 200
+    assert len(itinerary.json()["days"]) == 5
+    assert itinerary.json()["days"][0]["activities"]
+
     trace = client.get(f"/api/trips/{trip_id}/trace")
     assert trace.status_code == 200
     events = trace.json()
-    assert [event["node"] for event in events] == ["read", "find", "save"]
+    assert [event["node"] for event in events] == [
+        "read", "find", "planner", "validator", "save"
+    ]
+    assert next(event for event in events if event["node"] == "validator")["type"] == "validation"
     assert all(
         {"node", "type", "iteration", "status", "duration_ms"} <= event.keys()
         for event in events
@@ -60,7 +68,48 @@ def test_plan_requires_answers_to_missing_date_questions():
     response = client.post(f"/api/trips/{trip_id}/plan")
 
     assert response.status_code == 409
-    assert "date questions" in response.json()["detail"]
+    assert "Trip dates are required" in response.json()["detail"]
+
+
+def test_trip_rejects_end_date_before_start_date():
+    response = client.post(
+        "/api/trips",
+        json={
+            "destination": "Oslo",
+            "start_date": "2026-11-05",
+            "end_date": "2026-11-01",
+        },
+    )
+    assert response.status_code == 422
+    assert "End date cannot be before start date" in response.text
+
+
+def test_date_clarification_stops_after_two_rounds():
+    created = client.post("/api/trips", json={"destination": "Oslo"})
+    trip_id = created.json()["trip"]["id"]
+
+    first_answer = client.post(f"/api/trips/{trip_id}/answers", json={"answers": {}})
+    assert first_answer.status_code == 200
+    second_answer = client.post(f"/api/trips/{trip_id}/answers", json={"answers": {}})
+    assert second_answer.status_code == 200
+
+    planning = client.post(f"/api/trips/{trip_id}/plan")
+    assert planning.status_code == 409
+    assert "two-round" in planning.json()["detail"]
+
+    third_answer = client.post(f"/api/trips/{trip_id}/answers", json={"answers": {}})
+    assert third_answer.status_code == 409
+
+
+def test_answer_rejects_reversed_trip_dates():
+    created = client.post("/api/trips", json={"destination": "Oslo"})
+    trip_id = created.json()["trip"]["id"]
+    response = client.post(
+        f"/api/trips/{trip_id}/answers",
+        json={"answers": {"start_date": "2026-11-05", "end_date": "2026-11-01"}},
+    )
+    assert response.status_code == 422
+    assert "End date cannot be before start date" in response.json()["detail"]
 
 
 def test_unknown_trip_and_run_return_404():

@@ -9,7 +9,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from app.agents.planner import plan_and_validate
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
+from app.tools import get_place_search
 
 
 class TripState(TypedDict, total=False):
@@ -26,16 +28,19 @@ class TripState(TypedDict, total=False):
     find_error: str
     save_error: str
     run_id: str
+    itinerary: dict[str, Any]
+    validation: list[dict[str, Any]]
 
 
 def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict[str, Any]]:
     trip = state.get("trip", {})
+    event_type = details.pop("event_type", "node")
     entry = {
         "id": str(uuid4()),
         "trip_id": trip.get("trip_id", trip.get("id", "")),
         "run_id": state.get("run_id", ""),
         "node": step,
-        "type": "node",
+        "type": event_type,
         "iteration": details.get("attempt", details.get("iteration", 1)),
         "status": "failed" if "error" in details or step == "stop" else "ok",
         "duration_ms": 0,
@@ -61,17 +66,34 @@ def _missing_dates(state: TripState) -> list[str]:
     return [field for field in ("start_date", "end_date") if not trip.get(field)]
 
 
+def _date_error(state: TripState) -> str | None:
+    trip = state.get("trip", {})
+    raw_start, raw_end = trip.get("start_date"), trip.get("end_date")
+    try:
+        start = datetime.fromisoformat(str(raw_start)).date() if raw_start else None
+        end = datetime.fromisoformat(str(raw_end)).date() if raw_end else None
+    except ValueError:
+        return "Trip dates must use YYYY-MM-DD format. Please correct the trip dates."
+    if start is not None and end is not None and end < start:
+        return "End date cannot be before start date. Please correct the trip dates."
+    return None
+
+
 def _after_read(state: TripState) -> str:
-    return "ask_question" if _missing_dates(state) else "find_places"
+    if _missing_dates(state) or _date_error(state):
+        return "ask_question"
+    return "find_places"
 
 
 def _ask_question(state: TripState) -> dict[str, Any]:
     attempt = state.get("clarification_attempts", 0) + 1
     missing = _missing_dates(state)
+    date_error = _date_error(state)
     question = {
         "kind": "trip_dates",
-        "fields": missing,
-        "prompt": "What are your trip dates? Please provide the missing start and end dates.",
+        "fields": missing or ["start_date", "end_date"],
+        "prompt": date_error
+        or "What are your trip dates? Please provide the missing start and end dates.",
         "attempt": attempt,
         "max_attempts": MAX_CLARIFICATION_ATTEMPTS,
     }
@@ -94,7 +116,7 @@ def _wait_for_answer(state: TripState) -> dict[str, Any]:
 
 
 def _after_answer(state: TripState) -> str:
-    if not _missing_dates(state):
+    if not _missing_dates(state) and not _date_error(state):
         return "find_places"
     if state.get("clarification_attempts", 0) >= MAX_CLARIFICATION_ATTEMPTS:
         return "explain_failure"
@@ -110,8 +132,23 @@ def _sample_places(trip: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+def _search_places(trip: dict[str, Any]) -> list[dict[str, Any]]:
+    """Use the shared place-search adapter; Seattle fixtures remain demo-safe."""
+    interests = trip.get("interests", [])
+    query = " ".join(interests) if interests else ""
+    places = get_place_search().search_places(
+        query=query,
+        categories=interests or None,
+        mode=trip.get("mode", "walking"),
+        limit=30,
+    )
+    if not places and query:
+        places = get_place_search().search_places(mode=trip.get("mode", "walking"), limit=30)
+    return [place.model_dump(mode="json") for place in places]
+
+
 def _find_places(
-    state: TripState, search: Callable[[dict[str, Any]], list[dict[str, str]]]
+    state: TripState, search: Callable[[dict[str, Any]], list[dict[str, Any]]]
 ) -> dict[str, Any]:
     attempt = state.get("find_attempts", 0) + 1
     try:
@@ -120,7 +157,7 @@ def _find_places(
             "places": places,
             "find_attempts": attempt,
             "find_error": "",
-            "logs": _log(state, "find", f"Found {len(places)} sample places", attempt=attempt),
+            "logs": _log(state, "find", f"Found {len(places)} places", attempt=attempt),
         }
     except Exception as error:  # Keep transient tool failures inside the bounded graph loop.
         return {
@@ -157,15 +194,37 @@ def _explain_failure(state: TripState) -> dict[str, Any]:
 
 def build_trip_graph(
     checkpointer: Any | None = None,
-    search: Callable[[dict[str, Any]], list[dict[str, str]]] = _sample_places,
+    search: Callable[[dict[str, Any]], list[dict[str, Any]]] = _search_places,
     save: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ):
     """Build a resumable graph. External search/save functions are injectable for tests."""
     def find_node(state: TripState) -> dict[str, Any]:
         return _find_places(state, search)
 
+    def plan_node(state: TripState) -> dict[str, Any]:
+        itinerary, validation = plan_and_validate(
+            state.get("trip", {}), state.get("places", [])
+        )
+        planner_logs = _log(state, "planner", "Built a day-by-day itinerary")
+        validation_logs = _log(
+            {**state, "logs": planner_logs},
+            "validator",
+            f"Ran {len(validation)} itinerary checks",
+            event_type="validation",
+        )
+        return {
+            "itinerary": itinerary,
+            "validation": validation,
+            "logs": validation_logs,
+        }
+
     def save_node(state: TripState) -> dict[str, Any]:
-        record = {"trip": state.get("trip", {}), "places": state.get("places", [])}
+        record = {
+            "trip": state.get("trip", {}),
+            "places": state.get("places", []),
+            "itinerary": state.get("itinerary", {}),
+            "validation": state.get("validation", []),
+        }
         attempt = state.get("save_attempts", 0) + 1
         try:
             saved_trip = (save or (lambda value: value))(record)
@@ -197,6 +256,7 @@ def build_trip_graph(
     graph.add_node("ask_question", _ask_question)
     graph.add_node("wait_for_answer", _wait_for_answer)
     graph.add_node("find_places", find_node)
+    graph.add_node("planner", plan_node)
     graph.add_node("save_trip", save_node)
     graph.add_node("explain_failure", _explain_failure)
     graph.add_edge(START, "read_trip")
@@ -218,10 +278,11 @@ def build_trip_graph(
         _after_find,
         {
             "find_places": "find_places",
-            "save_trip": "save_trip",
+            "save_trip": "planner",
             "explain_failure": "explain_failure",
         },
     )
+    graph.add_edge("planner", "save_trip")
     graph.add_conditional_edges(
         "save_trip",
         after_save,

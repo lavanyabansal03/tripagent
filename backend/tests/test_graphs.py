@@ -44,9 +44,14 @@ def test_trip_graph_asks_for_dates_then_runs_in_order():
         "ask_question",
         "answer",
         "find",
+        "planner",
+        "validator",
         "save",
     ]
-    assert len(result["places"]) == 3
+    assert len(result["places"]) == 21
+    assert len(result["itinerary"]["days"]) == 5
+    assert result["itinerary"]["days"][0]["activities"]
+    assert result["validation"]
 
 
 def test_trip_graph_stops_after_two_unanswered_clarifications():
@@ -101,6 +106,31 @@ def test_place_search_failure_explains_after_three_tries():
     assert result["status"] == "failed"
     assert result["find_attempts"] == MAX_FIND_ATTEMPTS
     assert "search unavailable" in result["explanation"]
+
+
+def test_trip_graph_clarifies_reversed_dates_before_search():
+    graph = build_trip_graph(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "reversed-dates"}}
+    graph.invoke(
+        {
+            "trip": {
+                "destination": "Seattle",
+                "start_date": "2026-11-05",
+                "end_date": "2026-11-01",
+            }
+        },
+        config,
+    )
+    waiting = graph.get_state(config).values
+    assert waiting["status"] == "awaiting_input"
+    assert "End date cannot be before start date" in waiting["question"]["prompt"]
+
+    result = graph.invoke(
+        Command(resume={"start_date": "2026-11-01", "end_date": "2026-11-05"}),
+        config,
+    )
+    assert result["status"] == "completed"
+    assert "find" in [entry["node"] for entry in result["logs"]]
 
 
 def test_save_failure_is_bounded_and_explained():
