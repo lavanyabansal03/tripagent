@@ -1,5 +1,6 @@
 """Trip intake, clarification, planning, and trace API endpoints."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import uuid4
@@ -7,11 +8,13 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.agents.preferences import extract_preferences
 from app.graph.trip_planner import build_trip_graph
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 runs_router = APIRouter(prefix="/runs", tags=["runs"])
 trip_graph = build_trip_graph()
+logger = logging.getLogger(__name__)
 
 
 class TripRequest(BaseModel):
@@ -179,6 +182,29 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
     end_date = request.end_date or ""
     now = datetime.now(UTC).isoformat()
 
+    extracted_interests: list[str] = []
+    extracted_avoid: list[str] = []
+    extracted_max_travel_min: int | None = None
+    if request.free_text.strip():
+        try:
+            preferences = extract_preferences(request.free_text)
+            extracted_interests = preferences.interests
+            extracted_avoid = preferences.avoid
+            extracted_max_travel_min = preferences.max_travel_minutes
+        except Exception:
+            # Preference extraction is an enhancement; trip creation must still work.
+            logger.warning("Preference extraction failed; using form values and defaults")
+
+    interests = list(dict.fromkeys([*request.interests, *extracted_interests]))
+    avoid = list(dict.fromkeys([*request.avoid, *extracted_avoid]))
+    max_travel_min = request.max_travel_min
+    if (
+        extracted_max_travel_min is not None
+        and "max_travel_min" not in request.model_fields_set
+        and extracted_max_travel_min >= 1
+    ):
+        max_travel_min = extracted_max_travel_min
+
     trip = Trip(
         id=trip_id,
         destination=request.destination,
@@ -195,6 +221,12 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
         "mode": "explicit",
         "pace": "explicit",
     }
+    if extracted_interests and not request.interests:
+        provenance["interests"] = "inferred"
+    if extracted_avoid and not request.avoid:
+        provenance["avoid"] = "inferred"
+    if max_travel_min != request.max_travel_min:
+        provenance["max_travel_min"] = "inferred"
     requirements = TripRequirements(
         trip_id=trip_id,
         destination=request.destination,
@@ -204,10 +236,10 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
         budget_strictness=request.budget_strictness,
         mode=request.mode,
         pace=request.pace,
-        interests=request.interests,
-        avoid=request.avoid,
+        interests=interests,
+        avoid=avoid,
         tourist_local_ratio=request.tourist_local_ratio,
-        max_travel_min=request.max_travel_min,
+        max_travel_min=max_travel_min,
         free_text=request.free_text,
         provenance=provenance,
     )
