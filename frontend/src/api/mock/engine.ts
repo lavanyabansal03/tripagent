@@ -53,6 +53,11 @@ export interface TripFormInput {
   avoid: string[]
   tourist_local_ratio: number
   free_text: string
+  /**
+   * Form fields the traveller actually touched (F-01). Anything not listed is a
+   * default and is labelled "We assumed this", not "You chose this".
+   */
+  touched?: string[]
 }
 
 interface TripRecord {
@@ -103,14 +108,44 @@ function dayCount(req: TripRequirements): number {
  * ------------------------------------------------------------------ */
 
 const KEYWORDS: Record<string, string[]> = {
-  coffee: ['coffee', 'café', 'cafe', 'espresso'],
-  bookstores: ['bookstore', 'books', 'book shop'],
-  photography: ['photograph', 'photo', 'camera'],
-  nature: ['nature', 'outdoor', 'hike', 'park', 'trail'],
-  culture: ['culture', 'museum', 'art', 'gallery', 'history'],
-  food: ['food', 'eat', 'restaurant', 'seafood', 'vegetarian'],
-  nightlife: ['nightlife', 'bar', 'cocktail', 'music'],
-  shopping: ['shopping', 'market', 'shop'],
+  coffee: ['coffee', 'coffees', 'cafe', 'cafes', 'café', 'espresso'],
+  bookstores: [
+    'bookstore',
+    'bookstores',
+    'book',
+    'books',
+    'bookshop',
+    'bookshops',
+    'book shop',
+    'book shops',
+  ],
+  photography: ['photo', 'photos', 'photography', 'camera', 'cameras'],
+  nature: [
+    'nature',
+    'outdoor',
+    'outdoors',
+    'hike',
+    'hikes',
+    'hiking',
+    'park',
+    'parks',
+    'trail',
+    'trails',
+  ],
+  culture: ['culture', 'museum', 'museums', 'art', 'arts', 'gallery', 'galleries', 'history'],
+  food: ['food', 'foods', 'eat', 'eats', 'restaurant', 'restaurants', 'seafood', 'vegetarian', 'vegan'],
+  nightlife: ['nightlife', 'bar', 'bars', 'cocktail', 'cocktails', 'music'],
+  shopping: ['shopping', 'market', 'markets', 'shop', 'shops'],
+}
+
+/**
+ * Whole-word match. `includes()` matched "eat" inside "Seattle" (F-01), so every
+ * keyword is matched on word boundaries.
+ */
+function hasWord(haystack: string, words: string[]): boolean {
+  return words.some((word) =>
+    new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(haystack),
+  )
 }
 
 function extractFreeText(text: string): {
@@ -129,23 +164,23 @@ function extractFreeText(text: string): {
   const provenance: Record<string, Provenance> = {}
 
   for (const [interest, words] of Object.entries(KEYWORDS)) {
-    if (words.some((w) => lower.includes(w))) {
+    if (hasWord(lower, words)) {
       interests.push(interest)
-      provenance[`interests.${interest}`] = 'explicit'
+      provenance[`interests.${interest}`] = 'from_text'
     }
   }
   if (/(no museums|not? (into|like) museums|skip museums)/.test(lower)) {
     avoid.push('culture')
-    provenance['avoid.culture'] = 'explicit'
+    provenance['avoid.culture'] = 'from_text'
   }
-  if (/vegetarian|vegan/.test(lower)) {
+  if (hasWord(lower, ['vegetarian', 'vegan'])) {
     dietary.push('vegetarian')
-    provenance['dietary.vegetarian'] = 'explicit'
+    provenance['dietary.vegetarian'] = 'from_text'
   }
   const travel = lower.match(/(\d+)\s*(min|minutes)/)
-  const pace = /relaxed|slow|unhurried/.test(lower)
+  const pace = hasWord(lower, ['relaxed', 'slow', 'unhurried'])
     ? 'relaxed'
-    : /packed|busy|as much as possible/.test(lower)
+    : hasWord(lower, ['packed', 'busy'])
       ? 'packed'
       : undefined
   const touristLocal = /locals? (actually )?(enjoy|like|love)|local favourite|off the beaten/.test(
@@ -155,7 +190,8 @@ function extractFreeText(text: string): {
     : /tourist|famous sights|top sights/.test(lower)
       ? 20
       : undefined
-  return {    interests,
+  return {
+    interests,
     avoid,
     dietary,
     pace,
@@ -168,27 +204,43 @@ function extractFreeText(text: string): {
 export function createTrip(input: TripFormInput): CreateTripResponse {
   const tripId = uid('trip')
   const extracted = extractFreeText(input.free_text)
+  const touched = new Set(input.touched ?? [])
+  const formSource = (field: string): Provenance =>
+    touched.has(field) ? 'from_form' : 'default'
   const provenance: Record<string, Provenance> = {
-    destination: 'explicit',
-    start_date: 'explicit',
-    end_date: 'explicit',
-    mode: 'explicit',
-    budget: input.budget == null ? 'default' : 'explicit',
-    pace: 'explicit',
-    tourist_local_ratio: 'explicit',
-    max_travel_min: 'explicit',
+    destination: 'from_form',
+    start_date: input.start_date ? 'from_form' : 'default',
+    end_date: input.end_date ? 'from_form' : 'default',
+    budget: input.budget == null ? 'default' : 'from_form',
+    mode: formSource('mode'),
+    pace: formSource('pace'),
+    tourist_local_ratio: formSource('tourist_local_ratio'),
+    max_travel_min: formSource('max_travel_min'),
     ...extracted.provenance,
+  }
+  // Interests and avoidances chosen via form chips (free-text ones are already
+  // labelled from_text by the extractor above).
+  for (const interest of input.interests) {
+    provenance[`interests.${interest}`] ??= 'from_form'
+  }
+  for (const item of input.avoid) {
+    provenance[`avoid.${item}`] ??= 'from_form'
   }
 
   const interests = [...new Set([...input.interests, ...extracted.interests])]
   const avoid = [...new Set([...input.avoid, ...extracted.avoid])]
   const pace = extracted.pace ?? input.pace
-  if (extracted.pace) provenance.pace = 'inferred'
+  if (extracted.pace) provenance.pace = 'from_text'
   const touristLocal = extracted.touristLocal ?? input.tourist_local_ratio
   if (extracted.touristLocal != null) provenance.tourist_local_ratio = 'inferred'
   const maxTravel = extracted.maxTravel ?? input.max_travel_min
-  if (extracted.maxTravel != null) provenance.max_travel_min = 'inferred'
-  if (extracted.dietary.length) provenance.dietary = 'explicit'
+  if (extracted.maxTravel != null) provenance.max_travel_min = 'from_text'
+  if (extracted.dietary.length) provenance.dietary = 'from_text'
+  if (interests.length === 0) {
+    for (const fallback of ['coffee', 'nature', 'culture']) {
+      provenance[`interests.${fallback}`] = 'default'
+    }
+  }
 
   const requirements: TripRequirements = {
     trip_id: tripId,
@@ -361,29 +413,10 @@ function assignDays(candidates: Place[], days: number): Place[][] {
   return buckets
 }
 
-/** Nearest-neighbour walking order used to estimate a day's travel penalty. */
-function nnRoute(places: Place[], mode: TransportMode): Place[] {
-  if (places.length <= 1) return [...places]
-  const remaining = [...places]
-  const route = [remaining.shift()!]
-  while (remaining.length) {
-    const last = route[route.length - 1]
-    let best = 0
-    let bestT = Infinity
-    remaining.forEach((p, i) => {
-      const t = travelMinutes(last, p, mode)
-      if (t < bestT) {
-        bestT = t
-        best = i
-      }
-    })
-    route.push(remaining.splice(best, 1)[0])
-  }
-  return route
-}
-
 function legPenalty(places: Place[], mode: TransportMode, limit: number): number {
-  const route = nnRoute(places, mode)
+  // Must match the final layout (orderDay), or repair optimises a different
+  // ordering than the one that ships.
+  const route = orderDay(places)
   let penalty = 0
   for (let i = 1; i < route.length; i++) {
     penalty += Math.max(0, travelMinutes(route[i - 1], route[i], mode) - limit)
@@ -392,14 +425,19 @@ function legPenalty(places: Place[], mode: TransportMode, limit: number): number
 }
 
 /**
- * L3 repair pass: bounded swap/move of activities between days to remove hard
+ * L3 repair pass: bounded swap/move/replace of activities to remove hard
  * travel-time violations, accepted only when the violation score strictly
  * improves (mirrors the graph's progress check, FR-16).
  */
-function repairBuckets(buckets: Place[][], mode: TransportMode, limit: number): number {
+function repairBuckets(
+  buckets: Place[][],
+  mode: TransportMode,
+  limit: number,
+  pool: Place[] = [],
+): number {
   const total = () => buckets.reduce((sum, day) => sum + legPenalty(day, mode, limit), 0)
   let iterations = 0
-  for (let iter = 0; iter < 3 && total() > 0; iter++) {
+  for (let iter = 0; iter < 4 && total() > 0; iter++) {
     iterations = iter + 1
     const current = total()
     let best: { penalty: number; apply: () => void } | null = null
@@ -447,6 +485,30 @@ function repairBuckets(buckets: Place[][], mode: TransportMode, limit: number): 
                 buckets[a].splice(i, 1)
                 buckets[b].push(item)
               },
+            }
+          }
+        }
+      }
+    }
+
+    // Replace an activity with a closer unused candidate from the pool.
+    if (pool.length) {
+      const used = new Set(buckets.flat().map((p) => p.id))
+      const unused = pool.filter((p) => !used.has(p.id))
+      for (let a = 0; a < buckets.length; a++) {
+        for (let i = 0; i < buckets[a].length; i++) {
+          for (const candidate of unused) {
+            const original = buckets[a][i]
+            buckets[a][i] = candidate
+            const penalty = total()
+            buckets[a][i] = original
+            if (penalty < current - 0.5 && (!best || penalty < best.penalty)) {
+              best = {
+                penalty,
+                apply: () => {
+                  buckets[a][i] = candidate
+                },
+              }
             }
           }
         }
@@ -556,15 +618,16 @@ function buildItinerary(
 ): Itinerary {
   const days = dayCount(req)
   const avoid = new Set(req.avoid)
-  let candidates = demoPlaces
+  const pool = demoPlaces
     .filter((p) => !p.experience_types.some((e) => avoid.has(e)))
     .sort((a, b) => scorePlace(b, req) - scorePlace(a, req))
-    .slice(0, days * 4)
+  const candidates = pool.slice(0, days * 4)
 
   const buckets = assignDays(candidates, days)
   // Deterministic L3 repair: remove hard travel-time violations before
-  // validation, exactly like the graph would.
-  repairBuckets(buckets, req.mode, req.max_travel_min)
+  // validation, exactly like the graph would. The full pool is available so an
+  // activity can be replaced by a closer unused candidate.
+  repairBuckets(buckets, req.mode, req.max_travel_min, pool)
   const daysOut: ItineraryDay[] = []
   const validation: ValidationResult[] = []
 

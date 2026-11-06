@@ -29,6 +29,14 @@
   let interestInput = $state('')
   let interests = $state<string[]>(['coffee'])
   let avoid = $state<string[]>([])
+  let avoidInput = $state('')
+
+  // Which fields the traveller actually touched (F-01). Untouched defaults are
+  // labelled "We assumed this" instead of "You chose this".
+  const touched = new Set<string>()
+  function mark(field: string) {
+    touched.add(field)
+  }
 
   const modeOptions: Array<{ value: TripFormInput['mode']; label: string }> = [
     { value: 'walking', label: t('setup.modeWalking') },
@@ -53,6 +61,12 @@
     interestInput = ''
   }
 
+  function addAvoid() {
+    const value = avoidInput.trim().toLowerCase()
+    if (value && !avoid.includes(value)) avoid = [...avoid, value]
+    avoidInput = ''
+  }
+
   function submit() {
     onsubmit({
       destination,
@@ -67,6 +81,7 @@
       avoid,
       tourist_local_ratio: touristLocal,
       free_text: freeText,
+      touched: [...touched],
     })
   }
 </script>
@@ -89,6 +104,7 @@
         id="destination"
         type="text"
         bind:value={destination}
+        oninput={() => mark('destination')}
         placeholder={t('setup.destinationPlaceholder')}
         required
       />
@@ -110,7 +126,7 @@
 
     <div class="field">
       <label for="budget">{t('setup.budgetLabel')}</label>
-      <input id="budget" type="number" min="0" step="10" bind:value={budget} placeholder={t('setup.budgetPlaceholder')} />
+      <input id="budget" type="number" min="0" step="10" bind:value={budget} oninput={() => mark('budget')} placeholder={t('setup.budgetPlaceholder')} />
       <p class="helper">{t('setup.budgetHelp')}</p>
       <label class="checkbox">
         <input type="checkbox" bind:checked={budgetStrict} />
@@ -123,7 +139,7 @@
       <div class="segmented">
         {#each modeOptions as option (option.value)}
           <label class="segment" class:active={mode === option.value}>
-            <input type="radio" name="mode" value={option.value} checked={mode === option.value} onchange={() => (mode = option.value)} />
+            <input type="radio" name="mode" value={option.value} checked={mode === option.value} onchange={() => { mode = option.value; mark('mode') }} />
             {option.label}
           </label>
         {/each}
@@ -135,7 +151,7 @@
       <div class="segmented">
         {#each paceOptions as option (option.value)}
           <label class="segment" class:active={pace === option.value}>
-            <input type="radio" name="pace" value={option.value} checked={pace === option.value} onchange={() => (pace = option.value)} />
+            <input type="radio" name="pace" value={option.value} checked={pace === option.value} onchange={() => { pace = option.value; mark('pace') }} />
             {option.label}
           </label>
         {/each}
@@ -145,7 +161,7 @@
     <div class="field">
       <label for="max-travel">{t('setup.maxTravelLabel')}</label>
       <div class="range-row">
-        <input id="max-travel" type="range" min="10" max="90" step="5" bind:value={maxTravel} />
+        <input id="max-travel" type="range" min="10" max="90" step="5" bind:value={maxTravel} oninput={() => mark('max_travel_min')} />
         <output for="max-travel">{maxTravel} {t('setup.maxTravelUnit')}</output>
       </div>
     </div>
@@ -164,7 +180,7 @@
         <input
           type="text"
           bind:value={interestInput}
-          placeholder="Add your own"
+          placeholder={t('setup.addYourOwn')}
           onkeydown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
@@ -172,7 +188,7 @@
             }
           }}
         />
-        <button type="button" onclick={addInterest}>Add</button>
+        <button type="button" onclick={addInterest}>{t('setup.add')}</button>
       </div>
     </fieldset>
 
@@ -186,11 +202,25 @@
           </label>
         {/each}
       </div>
+      <div class="add-row">
+        <input
+          type="text"
+          bind:value={avoidInput}
+          placeholder={t('setup.addYourOwn')}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              addAvoid()
+            }
+          }}
+        />
+        <button type="button" onclick={addAvoid}>{t('setup.add')}</button>
+      </div>
     </fieldset>
   </div>
 
   <TellUsMoreField bind:value={freeText} />
-  <TouristLocalSlider bind:value={touristLocal} />
+  <TouristLocalSlider bind:value={touristLocal} onchange={() => mark('tourist_local_ratio')} />
 
   <div class="actions">
     <button type="submit" class="primary" disabled={busy}>

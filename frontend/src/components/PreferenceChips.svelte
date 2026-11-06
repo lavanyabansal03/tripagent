@@ -21,9 +21,15 @@
   let draft = $state('')
 
   const provenanceLabel: Record<Provenance, string> = {
-    explicit: t('understood.fromText'),
+    from_text: t('understood.fromText'),
+    from_form: t('understood.fromForm'),
     inferred: t('understood.inferred'),
     default: t('understood.assumed'),
+  }
+  // Unknown values (e.g. an older backend still sending "explicit") fall back
+  // to a neutral label rather than rendering a raw enum.
+  function labelFor(provenance: Provenance | string): string {
+    return provenanceLabel[provenance as Provenance] ?? t('understood.fromForm')
   }
 
   function beginEdit(chip: Chip) {
@@ -59,7 +65,7 @@
         >
           <span class="text">{chip.label}</span>
         </button>
-        <span class="provenance">{provenanceLabel[chip.provenance]}</span>
+        <span class="provenance">{labelFor(chip.provenance)}</span>
         {#if onremove}
           <button
             type="button"
@@ -100,6 +106,9 @@
   }
   .chip[data-provenance='inferred'] {
     background: var(--color-info-soft);
+  }
+  .chip[data-provenance='from_text'] {
+    background: var(--color-brand-soft);
   }
   .pill {
     border: none;

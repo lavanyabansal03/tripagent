@@ -45,7 +45,7 @@ exponential backoff, and use cached responses in tests and CI.
 | Map | Mapbox GL JS | Pins, routes, diff layer | Planned |
 | Styling | CSS custom properties in `frontend/src/styles/tokens.css` | Design tokens from the design system | Planned |
 | Copy | `frontend/src/copy/en.json` | All UI strings, no inline text | Planned |
-| Lint | ESLint + `eslint-plugin-svelte` (+ Prettier) | Frontend lint and formatting | Decided; repo still uses oxlint, switch pending |
+| Lint | oxlint (JS/TS) + `svelte-check` (Svelte templates + a11y) | Frontend lint and formatting | Installed; ESLint plan dropped — see `docs/followups/frontend.md` F-05 (needs team OK) |
 
 ## Testing and quality
 

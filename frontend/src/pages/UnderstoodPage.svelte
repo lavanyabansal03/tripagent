@@ -4,7 +4,7 @@
    * preference review, then the RunProgress while the graph runs.
    */
   import { onMount } from 'svelte'
-  import { t } from '../copy/i18n'
+  import { t, formatMoney } from '../copy/i18n'
   import type { Provenance } from '../types'
   import { mockEngine } from '../api/client'
   import { store } from '../state/store.svelte'
@@ -42,6 +42,8 @@
       const req = store.requirements
       if (!req) return []
       const out: Array<{ key: string; label: string; provenance: Provenance }> = []
+      const source = (field: string): Provenance => req.provenance[field] ?? 'default'
+
       for (const interest of req.interests) {
         out.push({
           key: `interests.${interest}`,
@@ -49,15 +51,41 @@
           provenance: req.provenance[`interests.${interest}`] ?? 'default',
         })
       }
-      out.push({ key: 'mode', label: req.mode, provenance: req.provenance.mode ?? 'explicit' })
-      out.push({ key: 'pace', label: req.pace, provenance: req.provenance.pace ?? 'explicit' })
+      for (const item of req.avoid) {
+        out.push({
+          key: `avoid.${item}`,
+          label: t('understood.avoidItem', { item }),
+          provenance: req.provenance[`avoid.${item}`] ?? 'default',
+        })
+      }
+      out.push({ key: 'mode', label: t('understood.modeValue', { value: req.mode }), provenance: source('mode') })
+      out.push({ key: 'pace', label: t('understood.paceValue', { value: req.pace }), provenance: source('pace') })
       out.push({
         key: 'max_travel_min',
-        label: `${req.max_travel_min} min travel`,
-        provenance: req.provenance.max_travel_min ?? 'explicit',
+        label: t('understood.travelValue', { n: req.max_travel_min }),
+        provenance: source('max_travel_min'),
+      })
+      const ratio = req.tourist_local_ratio
+      out.push({
+        key: 'tourist_local_ratio',
+        label:
+          ratio <= 30
+            ? t('understood.ratioSights', { n: ratio })
+            : ratio >= 70
+              ? t('understood.ratioLocal', { n: ratio })
+              : t('understood.ratioBalanced', { n: ratio }),
+        provenance: source('tourist_local_ratio'),
+      })
+      out.push({
+        key: 'budget',
+        label:
+          req.budget == null
+            ? t('understood.budgetNone')
+            : t('understood.budgetValue', { amount: formatMoney(req.budget) }),
+        provenance: source('budget'),
       })
       if (req.dietary.length) {
-        out.push({ key: 'dietary', label: req.dietary.join(', '), provenance: 'explicit' })
+        out.push({ key: 'dietary', label: req.dietary.join(', '), provenance: source('dietary') })
       }
       return out
     })(),
