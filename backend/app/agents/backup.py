@@ -1,4 +1,4 @@
-"""Backup Agent (A4): find validated alternatives for priority activities."""
+"""Backup Agent (A4): find alternatives for important activities."""
 
 from datetime import datetime
 from typing import Any
@@ -12,7 +12,6 @@ from app.validation.travel_time import check_travel_time
 
 
 def _as_dict(value: Any) -> dict:
-    """Accept dictionaries or Pydantic models."""
     if isinstance(value, dict):
         return value.copy()
     if hasattr(value, "model_dump"):
@@ -21,7 +20,6 @@ def _as_dict(value: Any) -> dict:
 
 
 def _get_preferences(plan: dict) -> dict:
-    """Read preferences from the plan or its requirements."""
     preferences = plan.get("requirements")
 
     if preferences is None:
@@ -31,38 +29,68 @@ def _get_preferences(plan: dict) -> dict:
 
 
 def _get_activities(plan: dict) -> list[dict]:
-    """Collect activities from every itinerary day."""
     if "days" in plan:
         return [
-            activity
+            _as_dict(activity)
             for day in plan["days"]
             for activity in day.get("activities", [])
         ]
 
-    return list(plan.get("activities", []))
+    return [
+        _as_dict(activity)
+        for activity in plan.get("activities", [])
+    ]
 
 
-def _is_important(activity: dict) -> bool:
-    """Identify activities that need a backup."""
-    return (
-        activity.get("priority") == "high"
-        or activity.get("must_do") is True
-    )
+def _normalize(value: str) -> str:
+    return " ".join(str(value).lower().split())
+
+
+def _is_important(activity: dict, preferences: dict) -> bool:
+    """Recognize high priority and the user's must-do places."""
+
+    if activity.get("priority") == "high":
+        return True
+
+    if activity.get("must_do") is True:
+        return True
+
+    place = activity.get("place") or {}
+    place_id = str(activity.get("place_id") or place.get("id") or "")
+    place_name = _normalize(place.get("name") or "")
+
+    for item in preferences.get("must_do", []):
+        item = _as_dict(item) if not isinstance(item, str) else {
+            "text": item
+        }
+
+        required_id = str(item.get("place_id") or "")
+        required_text = _normalize(item.get("text") or "")
+
+        if required_id and place_id and required_id == place_id:
+            return True
+
+        if place_name and required_text:
+            if place_name == required_text:
+                return True
+
+            if place_name in required_text.split(" - "):
+                return True
+
+    return False
 
 
 def _purpose_tags(activity: dict) -> list[str]:
-    """Find the experience types the replacement should preserve."""
     tags = activity.get("purpose_tags") or []
 
     if not tags:
         place = activity.get("place") or {}
         tags = place.get("experience_types") or []
 
-    return [str(tag).lower() for tag in tags]
+    return [str(tag).strip().lower() for tag in tags]
 
 
 def _candidate_cost(place: dict) -> float | None:
-    """Use a known estimated cost, not an invented price."""
     cost = place.get("est_cost_high")
 
     if cost is None:
@@ -80,23 +108,26 @@ def _check_candidate(
     version: int,
     radius_min: int,
 ) -> bool:
-    """Return True only when essential validation checks pass."""
-
     original = activity.get("place") or {}
 
     if candidate.get("id") == original.get("id"):
         return False
 
-    if candidate.get("lat") is None or candidate.get("lng") is None:
+    if not candidate.get("id"):
         return False
 
-    if original.get("lat") is None or original.get("lng") is None:
+    if any(
+        place.get(key) is None
+        for place in (original, candidate)
+        for key in ("lat", "lng")
+    ):
         return False
 
     purpose = set(_purpose_tags(activity))
+
     candidate_types = {
-        str(tag).lower()
-        for tag in candidate.get("experience_types", [])
+        str(tag).strip().lower()
+        for tag in (candidate.get("experience_types") or [])
     }
 
     if not purpose or not purpose.intersection(candidate_types):
@@ -108,7 +139,7 @@ def _check_candidate(
     effective_limit = radius_min
 
     if max_travel is not None:
-        effective_limit = min(effective_limit, max_travel)
+        effective_limit = min(radius_min, max_travel)
 
     distance = distance_km(
         LatLng(lat=original["lat"], lng=original["lng"]),
@@ -116,9 +147,7 @@ def _check_candidate(
         candidate["lng"],
     )
 
-    travel_minutes = rough_minutes(distance, mode)
-
-    if travel_minutes > effective_limit:
+    if rough_minutes(distance, mode) > effective_limit:
         return False
 
     replacement = {
@@ -128,7 +157,6 @@ def _check_candidate(
         "est_cost": _candidate_cost(candidate),
     }
 
-    # Opening hours must be structured and verifiable.
     hours = candidate.get("hours")
 
     if not isinstance(hours, list):
@@ -149,7 +177,6 @@ def _check_candidate(
     if not opening_result.passed:
         return False
 
-    # Reuse the existing avoid-list validator.
     avoid_result = check_avoid_list(
         [replacement],
         preferences.get("avoid", []),
@@ -160,17 +187,19 @@ def _check_candidate(
     if not avoid_result.passed:
         return False
 
-    # Check the budget using the full itinerary with the replacement.
-    budget_max = preferences.get(
-        "budget_max", preferences.get("budget")
-    )
+    budget_max = preferences.get("budget_max")
+
+    if budget_max is None:
+        budget_max = preferences.get("budget")
 
     if budget_max is not None:
         if replacement["est_cost"] is None:
             return False
 
         updated = [
-            replacement if item.get("id") == activity.get("id") else item
+            replacement
+            if item.get("id") == activity.get("id")
+            else item
             for item in activities
         ]
 
@@ -185,7 +214,6 @@ def _check_candidate(
         if not budget_result.passed:
             return False
 
-    # Check travel feasibility against neighbouring activities.
     same_day = sorted(
         [
             item
@@ -238,10 +266,7 @@ def find_backups(
     search=None,
     radius_min: int = 20,
 ) -> list[dict]:
-    """Find one validated replacement for each important activity.
-
-    Returns an explicit unavailable result when no suitable backup exists.
-    """
+    """Find one suitable backup per important activity."""
 
     if radius_min <= 0:
         raise ValueError("radius_min must be positive")
@@ -259,18 +284,17 @@ def find_backups(
     results = []
 
     for activity in activities:
-        if not _is_important(activity):
-            continue
-
         if activity.get("status") == "cancelled":
             continue
 
-        activity_id = activity.get("id")
+        if not _is_important(activity, preferences):
+            continue
+
         original = activity.get("place") or {}
         purpose = _purpose_tags(activity)
 
         result = {
-            "activity_id": activity_id,
+            "activity_id": activity.get("id"),
             "purpose_tags": purpose,
             "backup": None,
             "reason": "No verified backup available.",
@@ -308,7 +332,7 @@ def find_backups(
         for candidate in candidates:
             place = _as_dict(candidate)
 
-            if _check_candidate(
+            if not _check_candidate(
                 activity,
                 place,
                 activities,
@@ -317,27 +341,30 @@ def find_backups(
                 version,
                 radius_min,
             ):
-                distance = distance_km(
-                    LatLng(
-                        lat=original["lat"],
-                        lng=original["lng"],
-                    ),
-                    place["lat"],
-                    place["lng"],
-                )
+                continue
 
-                valid_candidates.append(
-                    (
-                        -len(
-                            set(purpose).intersection(
-                                set(place.get("experience_types", []))
-                            )
-                        ),
-                        rough_minutes(distance, mode),
-                        _candidate_cost(place) or 0,
-                        place,
-                    )
+            distance = distance_km(
+                LatLng(
+                    lat=original["lat"],
+                    lng=original["lng"],
+                ),
+                place["lat"],
+                place["lng"],
+            )
+
+            matching_types = {
+                str(tag).strip().lower()
+                for tag in (place.get("experience_types") or [])
+            }
+
+            valid_candidates.append(
+                (
+                    -len(set(purpose).intersection(matching_types)),
+                    rough_minutes(distance, mode),
+                    _candidate_cost(place) or 0,
+                    place,
                 )
+            )
 
         if valid_candidates:
             valid_candidates.sort(key=lambda item: item[:3])
@@ -345,8 +372,8 @@ def find_backups(
 
             result["backup"] = selected
             result["reason"] = (
-                "Verified alternative with matching purpose, "
-                "opening hours, budget, and travel constraints."
+                "Alternative passed the available opening-hours, "
+                "budget, avoid-list, and estimated travel checks."
             )
 
         results.append(result)
