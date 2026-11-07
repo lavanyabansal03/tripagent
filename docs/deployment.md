@@ -22,18 +22,22 @@ services.
    repo.
 2. **New +** → **Blueprint** → pick the `tripagent` repo → **Apply**.
 3. Render provisions:
-   - `tripagent-web` — static site (build `npm ci && npm run build`, publish `dist`)
-   - `tripagent-api` — web service (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
+   - `tripagent-web-lavanyabansal03` — static site (build `npm ci && npm run build`, publish `dist`)
+   - `tripagent-api-lavanyabansal03` — web service (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
+
+   Names include the repo owner because `onrender.com` subdomains are global; if
+   Render says a name is taken, change it in both services (the frontend's
+   `VITE_API_BASE` follows the API service by name).
 4. When prompted, paste any secrets (all optional while `DEMO_MODE=true`). The
    Mapbox public token is optional — without it the app uses the schematic map
    fallback.
-5. Open the `tripagent-web` URL, e.g. `https://tripagent-web.onrender.com`.
+5. Open the frontend URL Render shows, e.g. `https://tripagent-web-lavanyabansal03.onrender.com`.
 
 Every push to `main` redeploys automatically (`autoDeploy: true`).
 
 ### Environment variables
 
-Backend (`tripagent-api`):
+Backend (`tripagent-api-lavanyabansal03`):
 
 | Key | Value |
 |-----|-------|
@@ -42,12 +46,12 @@ Backend (`tripagent-api`):
 | `GOOGLE_API_KEY`, `MAPBOX_SECRET_TOKEN`, `FOURSQUARE_API_KEY` | optional; set to leave demo mode |
 | `DATABASE_URL` | `sqlite:///./tripagent.db` (swap for Postgres when needed) |
 
-Frontend (`tripagent-web`):
+Frontend (`tripagent-web-lavanyabansal03`):
 
 | Key | Value |
 |-----|-------|
 | `VITE_DEMO_MODE` | `true` (set `false` once trip endpoints exist) |
-| `VITE_API_BASE` | `https://tripagent-api.onrender.com` |
+| `VITE_API_BASE` | the API service's host (the Blueprint resolves it via `fromService`) |
 | `VITE_MAPBOX_PUBLIC_TOKEN` | optional, URL-restricted **public** token only |
 
 > Never put a secret Mapbox/server key in a `VITE_` variable — those are baked
@@ -87,7 +91,8 @@ docker run --rm -p 8080:80 tripagent-web
 ## Deploy checklist (sprint R-06)
 
 - [ ] Blueprint applied; both services healthy (`/api/health` returns `ok`).
-- [ ] `tripagent-web` loads and shows *Demo mode*.
+- [ ] The frontend loads; it shows *Demo mode* while `VITE_DEMO_MODE=true`.
+- [ ] With `VITE_DEMO_MODE=false`, no "Demo mode" text is shown and the header shows *Backend connected*.
 - [ ] `VITE_API_BASE` points at the live API and the header shows *Backend connected*.
 - [ ] Mapbox token set (or schematic fallback accepted).
 - [ ] Three clean rehearsals on the public URL in demo mode.
