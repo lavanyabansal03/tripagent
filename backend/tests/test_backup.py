@@ -49,6 +49,7 @@ def make_plan(priority="high"):
             "budget_max": 100,
             "budget_strictness": "strict",
             "avoid": [],
+            "must_do": [],
             "mode": "walking",
             "max_travel_min": 30,
         },
@@ -59,6 +60,7 @@ def make_plan(priority="high"):
                     {
                         "id": "A001",
                         "day": 1,
+                        "place_id": "original",
                         "start": "2026-11-10T10:00:00-08:00",
                         "end": "2026-11-10T11:00:00-08:00",
                         "priority": priority,
@@ -74,8 +76,6 @@ def make_plan(priority="high"):
 
 
 class FakePlaceSearch:
-    """Predictable search results without API calls."""
-
     def __init__(self, places):
         self.places = places
 
@@ -93,11 +93,7 @@ class FakePlaceSearch:
 
 def test_finds_valid_backup():
     candidate = make_place(
-        "backup1",
-        "Alternative Coffee Shop",
-        ["cafe"],
-        10,
-        lat=47.6206,
+        "backup1", "Alternative Coffee Shop", ["cafe"], 10
     )
 
     results = find_backups(
@@ -105,31 +101,24 @@ def test_finds_valid_backup():
         FakePlaceSearch([candidate]),
     )
 
-    assert len(results) == 1
     assert results[0]["backup"]["id"] == "backup1"
 
 
 def test_rejects_original_place():
-    original = make_place(
-        "original",
-        "Original Coffee Shop",
-        ["cafe"],
+    candidate = make_place(
+        "original", "Original Coffee Shop", ["cafe"]
     )
 
     results = find_backups(
         make_plan(),
-        FakePlaceSearch([original]),
+        FakePlaceSearch([candidate]),
     )
 
     assert results[0]["backup"] is None
 
 
 def test_rejects_wrong_purpose():
-    candidate = make_place(
-        "museum1",
-        "Art Museum",
-        ["culture"],
-    )
+    candidate = make_place("museum1", "Art Museum", ["culture"])
 
     results = find_backups(
         make_plan(),
@@ -163,10 +152,7 @@ def test_rejects_closed_place():
 
 def test_rejects_expensive_backup():
     candidate = make_place(
-        "expensive1",
-        "Expensive Coffee Shop",
-        ["cafe"],
-        cost=200,
+        "expensive1", "Expensive Coffee Shop", ["cafe"], 200
     )
 
     results = find_backups(
@@ -177,12 +163,8 @@ def test_rejects_expensive_backup():
     assert results[0]["backup"] is None
 
 
-def test_rejects_avoid_list_conflict():
-    candidate = make_place(
-        "bar1",
-        "Coffee Bar",
-        ["cafe"],
-    )
+def test_rejects_avoid_conflict():
+    candidate = make_place("bar1", "Coffee Bar", ["cafe"])
 
     plan = make_plan()
     plan["requirements"]["avoid"] = ["bar"]
@@ -201,12 +183,45 @@ def test_no_candidates():
         FakePlaceSearch([]),
     )
 
-    assert len(results) == 1
     assert results[0]["backup"] is None
     assert "No verified backup" in results[0]["reason"]
 
 
-def test_only_important_activities():
+def test_low_priority_not_selected():
+    plan = make_plan(priority="low")
+    candidate = make_place("backup1", "Coffee Shop", ["cafe"])
+
+    results = find_backups(
+        plan,
+        FakePlaceSearch([candidate]),
+    )
+
+    assert results == []
+
+
+def test_medium_priority_not_selected_automatically():
+    plan = make_plan(priority="medium")
+    candidate = make_place("backup1", "Coffee Shop", ["cafe"])
+
+    results = find_backups(
+        plan,
+        FakePlaceSearch([candidate]),
+    )
+
+    assert results == []
+
+
+def test_medium_priority_with_must_do_place_id():
+    plan = make_plan(priority="medium")
+
+    plan["requirements"]["must_do"] = [
+        {
+            "text": "Original Coffee Shop",
+            "place_id": "original",
+            "splurge": False,
+        }
+    ]
+
     candidate = make_place(
         "backup1",
         "Alternative Coffee Shop",
@@ -214,20 +229,61 @@ def test_only_important_activities():
     )
 
     results = find_backups(
-        make_plan(priority="low"),
+        plan,
         FakePlaceSearch([candidate]),
     )
 
-    assert results == []
+    assert len(results) == 1
+    assert results[0]["backup"]["id"] == "backup1"
 
 
-def test_rejects_missing_opening_hours():
+def test_medium_priority_with_must_do_name():
+    plan = make_plan(priority="medium")
+
+    plan["requirements"]["must_do"] = [
+        {
+            "text": "Original Coffee Shop",
+            "place_id": None,
+            "splurge": False,
+        }
+    ]
+
     candidate = make_place(
         "backup1",
         "Alternative Coffee Shop",
         ["cafe"],
     )
 
+    results = find_backups(
+        plan,
+        FakePlaceSearch([candidate]),
+    )
+
+    assert results[0]["backup"]["id"] == "backup1"
+
+
+def test_unrelated_must_do_not_selected():
+    plan = make_plan(priority="medium")
+
+    plan["requirements"]["must_do"] = [
+        {
+            "text": "Space Needle",
+            "place_id": "space-needle",
+        }
+    ]
+
+    candidate = make_place("backup1", "Coffee Shop", ["cafe"])
+
+    results = find_backups(
+        plan,
+        FakePlaceSearch([candidate]),
+    )
+
+    assert results == []
+
+
+def test_rejects_missing_hours():
+    candidate = make_place("backup1", "Coffee Shop", ["cafe"])
     candidate["hours"] = None
 
     results = find_backups(
@@ -238,19 +294,12 @@ def test_rejects_missing_opening_hours():
     assert results[0]["backup"] is None
 
 
-def test_selects_closest_valid_backup():
+def test_selects_closest_backup():
     far = make_place(
-        "far",
-        "Far Coffee Shop",
-        ["cafe"],
-        lat=47.6300,
+        "far", "Far Coffee Shop", ["cafe"], lat=47.6300
     )
-
     near = make_place(
-        "near",
-        "Nearby Coffee Shop",
-        ["cafe"],
-        lat=47.6206,
+        "near", "Nearby Coffee Shop", ["cafe"], lat=47.6206
     )
 
     results = find_backups(
@@ -259,3 +308,17 @@ def test_selects_closest_valid_backup():
     )
 
     assert results[0]["backup"]["id"] == "near"
+
+
+def test_cancelled_activity_ignored():
+    plan = make_plan()
+    plan["days"][0]["activities"][0]["status"] = "cancelled"
+
+    candidate = make_place("backup1", "Coffee Shop", ["cafe"])
+
+    results = find_backups(
+        plan,
+        FakePlaceSearch([candidate]),
+    )
+
+    assert results == []
