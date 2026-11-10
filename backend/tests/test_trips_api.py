@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app.agents.preferences import Preferences
+from app.api import trips as trips_api
 from app.main import app
 
 client = TestClient(app)
@@ -115,3 +117,78 @@ def test_answer_rejects_reversed_trip_dates():
 def test_unknown_trip_and_run_return_404():
     assert client.get("/api/trips/not-a-trip").status_code == 404
     assert client.get("/api/runs/not-a-run").status_code == 404
+
+
+def test_create_trip_merges_extracted_preferences_without_overwriting_form_values(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        trips_api,
+        "extract_preferences",
+        lambda _text: Preferences(
+            interests=["coffee", "art"],
+            avoid=["nightclubs", "bars"],
+            max_travel_minutes=20,
+        ),
+    )
+
+    response = client.post(
+        "/api/trips",
+        json={
+            "destination": "Seattle",
+            "interests": ["art", "museums"],
+            "avoid": ["bars"],
+            "max_travel_min": 25,
+            "budget": 150,
+            "free_text": "We love coffee and galleries.",
+        },
+    )
+
+    assert response.status_code == 201
+    requirements = response.json()["requirements"]
+    assert requirements["interests"] == ["art", "museums", "coffee"]
+    assert requirements["avoid"] == ["bars", "nightclubs"]
+    assert requirements["max_travel_min"] == 25
+    assert requirements["budget"] == 150
+
+
+def test_create_trip_uses_extracted_preferences_when_form_values_are_omitted(monkeypatch):
+    monkeypatch.setattr(
+        trips_api,
+        "extract_preferences",
+        lambda _text: Preferences(
+            interests=["coffee"], avoid=["crowds"], max_travel_minutes=18
+        ),
+    )
+
+    response = client.post(
+        "/api/trips",
+        json={"destination": "Seattle", "free_text": "Coffee, avoid crowds, short travel."},
+    )
+
+    assert response.status_code == 201
+    requirements = response.json()["requirements"]
+    assert requirements["interests"] == ["coffee"]
+    assert requirements["avoid"] == ["crowds"]
+    assert requirements["max_travel_min"] == 18
+    assert requirements["provenance"]["interests"] == "inferred"
+    assert requirements["provenance"]["avoid"] == "inferred"
+    assert requirements["provenance"]["max_travel_min"] == "inferred"
+
+
+def test_create_trip_continues_when_preference_extraction_fails(monkeypatch):
+    def fail_extraction(_text):
+        raise ValueError("GOOGLE_API_KEY is not set.")
+
+    monkeypatch.setattr(trips_api, "extract_preferences", fail_extraction)
+    response = client.post(
+        "/api/trips",
+        json={
+            "destination": "Seattle",
+            "interests": ["parks"],
+            "free_text": "A relaxed trip.",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["requirements"]["interests"] == ["parks"]
