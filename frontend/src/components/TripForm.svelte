@@ -1,15 +1,17 @@
 <script lang="ts">
   import { t } from '../copy/i18n'
-  import type { TripFormInput } from '../api/client'
+  import { DEMO_MODE, type TripFormInput } from '../api/client'
   import TellUsMoreField from './TellUsMoreField.svelte'
   import TouristLocalSlider from './TouristLocalSlider.svelte'
 
   interface Props {
     onsubmit: (input: TripFormInput) => void
     busy?: boolean
+    /** Overridable for tests; defaults to the build's demo/live mode. */
+    demoMode?: boolean
   }
 
-  let { onsubmit, busy = false }: Props = $props()
+  let { onsubmit, busy = false, demoMode = DEMO_MODE }: Props = $props()
 
   // Seattle is the tuned demo city; prefill dates so the demo is one click.
   const today = new Date()
@@ -226,7 +228,9 @@
     <button type="submit" class="primary" disabled={busy}>
       {busy ? t('setup.submitting') : t('setup.primaryCta')}
     </button>
-    <p class="demo-note">{t('setup.demoNote')}</p>
+    {#if demoMode}
+      <p class="demo-note">{t('setup.demoNote')}</p>
+    {/if}
   </div>
 </form>
 
