@@ -5,6 +5,8 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.agents.repair import hard_failures, repair_itinerary, violation_score
+from app.config import MAX_REPAIR_ITERATIONS
 from app.models.validation_result import ValidationResult
 from app.tools.base import LatLng, Mode
 from app.tools.mock_places import distance_km, rough_minutes
@@ -14,8 +16,6 @@ from app.validation.opening_hours import check_plan_opening_hours
 from app.validation.overlap import check_overlap
 from app.validation.travel_time import check_travel_time
 from app.validation.variety import check_variety
-
-MAX_REPAIR_ITERATIONS = 3
 
 _DESTINATION_TIMEZONES = {
     "seattle": "America/Los_Angeles",
@@ -152,6 +152,82 @@ def _fit_opening_hours(
     return earliest
 
 
+def check_itinerary(
+    trip: dict[str, Any], days: list[dict[str, Any]], *, trip_id: str, version: int
+) -> list[ValidationResult]:
+    """Run the deterministic checks on a day-by-day plan (used again after each repair)."""
+    mode: Mode = trip.get("mode", "walking")
+    activities = [
+        activity
+        for day in days
+        for activity in day["activities"]
+        if activity.get("status") != "cancelled"
+    ]
+    daily_variety = [
+        check_variety(
+            day["activities"],
+            trip_id=trip_id,
+            version=version,
+        )
+        for day in days
+    ]
+    variety_failures = [result for result in daily_variety if not result.passed]
+    variety_result = (
+        ValidationResult(
+            id="variety-check",
+            trip_id=trip_id,
+            version=version,
+            rule="variety",
+            passed=False,
+            severity=variety_failures[0].severity,
+            message=" ".join(result.message for result in variety_failures),
+            activity_ids=list(
+                dict.fromkeys(
+                    activity_id
+                    for result in variety_failures
+                    for activity_id in result.activity_ids
+                )
+            ),
+        )
+        if variety_failures
+        else check_variety([], trip_id=trip_id, version=version)
+    )
+    validation: list[ValidationResult] = [
+        check_overlap(activities, trip_id, version),
+        check_budget(
+            activities,
+            trip.get("budget"),
+            trip.get("budget_strictness", "strict"),
+            trip_id,
+            version,
+        ),
+        check_travel_time(
+            activities,
+            mode,
+            trip.get("max_travel_min"),
+            trip_id,
+            version,
+        ),
+        check_avoid_list(activities, trip.get("avoid", []), trip_id, version),
+        variety_result,
+        check_plan_opening_hours(activities, trip_id=trip_id, version=version),
+    ]
+    if not activities:
+        validation.append(
+            ValidationResult(
+                id="plan-content-check",
+                trip_id=trip_id,
+                version=version,
+                rule="plan_content",
+                passed=False,
+                severity="hard",
+                message="No activities could be scheduled for this trip.",
+                activity_ids=[],
+            )
+        )
+    return validation
+
+
 def plan_and_validate(
     trip: dict[str, Any],
     places: list[dict[str, Any]],
@@ -245,68 +321,7 @@ def plan_and_validate(
             }
         )
 
-    daily_variety = [
-        check_variety(
-            day["activities"],
-            trip_id=trip_id,
-            version=version,
-        )
-        for day in days
-    ]
-    variety_failures = [result for result in daily_variety if not result.passed]
-    variety_result = (
-        ValidationResult(
-            id="variety-check",
-            trip_id=trip_id,
-            version=version,
-            rule="variety",
-            passed=False,
-            severity=variety_failures[0].severity,
-            message=" ".join(result.message for result in variety_failures),
-            activity_ids=list(
-                dict.fromkeys(
-                    activity_id
-                    for result in variety_failures
-                    for activity_id in result.activity_ids
-                )
-            ),
-        )
-        if variety_failures
-        else check_variety([], trip_id=trip_id, version=version)
-    )
-    validation: list[ValidationResult] = [
-        check_overlap(all_activities, trip_id, version),
-        check_budget(
-            all_activities,
-            trip.get("budget"),
-            trip.get("budget_strictness", "strict"),
-            trip_id,
-            version,
-        ),
-        check_travel_time(
-            all_activities,
-            mode,
-            trip.get("max_travel_min"),
-            trip_id,
-            version,
-        ),
-        check_avoid_list(all_activities, trip.get("avoid", []), trip_id, version),
-        variety_result,
-        check_plan_opening_hours(all_activities, trip_id=trip_id, version=version),
-    ]
-    if not all_activities:
-        validation.append(
-            ValidationResult(
-                id="plan-content-check",
-                trip_id=trip_id,
-                version=version,
-                rule="plan_content",
-                passed=False,
-                severity="hard",
-                message="No activities could be scheduled for this trip.",
-                activity_ids=[],
-            )
-        )
+    validation = check_itinerary(trip, days, trip_id=trip_id, version=version)
     if unscheduled_places:
         validation.append(
             ValidationResult(
@@ -336,184 +351,55 @@ def plan_and_validate(
     return itinerary, [result.model_dump() for result in validation]
 
 
-def _repair_candidates(
-    trip: dict[str, Any],
-    places: list[dict[str, Any]],
-    itinerary: dict[str, Any],
-    failed_checks: list[dict[str, Any]],
+def _with_daily_schedule(
+    checks: list[dict[str, Any]], first_checks: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Replace activities implicated by failed rules with unused nearby candidates."""
-    activities = [
-        activity
-        for day in itinerary.get("days", [])
-        for activity in day.get("activities", [])
-    ]
-    activity_by_id = {activity["id"]: activity for activity in activities}
-    failed_activity_ids: set[str] = set()
-    budget_failed = False
-    for result in failed_checks:
-        rule = result["rule"]
-        ids = result.get("activity_ids", [])
-        if rule == "budget":
-            budget_failed = True
-        elif rule == "travel_time":
-            # Keep the first stop and replace the later stop that creates the long leg.
-            failed_activity_ids.update(ids[1::2] if len(ids) > 1 else ids)
-        else:
-            failed_activity_ids.update(ids)
-
-    if budget_failed:
-        selected_ids = {
-            str(activity.get("place_id")) for activity in activities
-        }
-        selected = [place for place in places if str(place.get("id")) in selected_ids]
-        alternatives = sorted(
-            [place for place in places if str(place.get("id")) not in selected_ids],
-            key=lambda place: (
-                place.get("est_cost_low") is None,
-                place.get("est_cost_low")
-                if place.get("est_cost_low") is not None
-                else float("inf"),
-            ),
-        )
-        if selected:
-            most_expensive = max(
-                selected,
-                key=lambda place: (
-                    place.get("est_cost_low") is None,
-                    place.get("est_cost_low")
-                    if place.get("est_cost_low") is not None
-                    else float("inf"),
-                ),
-            )
-            replacement = alternatives[0] if alternatives else None
-            old_cost = most_expensive.get("est_cost_low")
-            new_cost = replacement.get("est_cost_low") if replacement else None
-            if replacement is not None and (
-                (old_cost is None and new_cost is not None)
-                or (old_cost is not None and new_cost is not None and new_cost < old_cost)
-            ):
-                replaced = [
-                    replacement if place is most_expensive else place for place in places
-                ]
-                unique: dict[str, dict[str, Any]] = {}
-                for place in replaced:
-                    unique.setdefault(str(place.get("id")), place)
-                return list(unique.values())
-            reduced = [place for place in places if place is not most_expensive]
-            return reduced if reduced else places
-
-    if not failed_activity_ids:
-        # Do not silently drop activities when a rule has no precise target.
-        return places
-
-    failed_place_ids = {
-        str(activity_by_id[activity_id].get("place_id"))
-        for activity_id in failed_activity_ids
-        if activity_id in activity_by_id
-    }
-    selected_place_ids = {str(activity.get("place_id")) for activity in activities}
-    alternatives = [
-        place
-        for place in places
-        if str(place.get("id")) not in selected_place_ids
-        and str(place.get("id")) not in failed_place_ids
-    ]
-    if not alternatives:
-        # If no replacement exists, remove only the failing activity rather than
-        # keeping a known-invalid stop or discarding the unaffected itinerary.
-        reduced = [place for place in places if str(place.get("id")) not in failed_place_ids]
-        return reduced if reduced else places
-
-    def replacement_score(candidate: dict[str, Any]) -> tuple[float, float]:
-        neighbors = [
-            activity.get("place", {})
-            for activity in activities
-            if activity.get("id") not in failed_activity_ids
-            and activity.get("day")
-            in {
-                activity_by_id[activity_id].get("day")
-                for activity_id in failed_activity_ids
-                if activity_id in activity_by_id
-            }
-        ]
-        distances = []
-        for neighbor in neighbors:
-            if all(
-                item.get(key) is not None
-                for item in (candidate, neighbor)
-                for key in ("lat", "lng")
-            ):
-                distances.append(
-                    distance_km(
-                        LatLng(lat=candidate["lat"], lng=candidate["lng"]),
-                        neighbor["lat"],
-                        neighbor["lng"],
-                    )
-                )
-        cost = candidate.get("est_cost_low")
-        return (min(distances, default=0.0), cost if cost is not None else float("inf"))
-
-    alternatives.sort(key=replacement_score)
-    replacements = iter(alternatives[: len(failed_place_ids)])
-    repaired = []
-    for place in places:
-        if str(place.get("id")) in failed_place_ids:
-            replacement = next(replacements, None)
-            if replacement is not None:
-                repaired.append(replacement)
-            continue
-        repaired.append(place)
-    return repaired
+    """Repairs do not change which places did not fit in the day; keep that result."""
+    return checks + [c for c in first_checks if c["rule"] == "daily_schedule"]
 
 
 def build_plan_with_repairs(
     trip: dict[str, Any], places: list[dict[str, Any]], *, version: int = 1
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int, str, str | None]:
-    """Run checks and retry targeted candidate swaps at most three times."""
-    candidates = list(places)
-    previous_signature: tuple[Any, ...] | None = None
-    last_itinerary: dict[str, Any] = {}
-    last_checks: list[dict[str, Any]] = []
+    """L3 loop (docs/03 5.3): plan once, then patch only the broken activities.
 
-    for repair_iteration in range(MAX_REPAIR_ITERATIONS + 1):
-        last_itinerary, last_checks = plan_and_validate(
-            trip,
-            candidates,
-            version=version,
-            repair_iteration=repair_iteration,
+    Exits: PASS when no hard problem is left; INFEASIBLE after MAX_REPAIR_ITERATIONS
+    tries, when a try changes nothing, or when the violation score stops improving
+    twice in a row.
+    """
+    itinerary, first_checks = plan_and_validate(trip, places, version=version)
+    checks = first_checks
+    itinerary["repairs"] = []
+    best_score = violation_score(checks)
+    stalls = 0
+    iterations = 0
+
+    while hard_failures(checks) and iterations < MAX_REPAIR_ITERATIONS:
+        iterations += 1
+        changes = repair_itinerary(trip, itinerary, places)
+        for change in changes:
+            change["iteration"] = iterations
+        itinerary["repairs"].extend(changes)
+        results = check_itinerary(
+            trip, itinerary["days"], trip_id=itinerary["trip_id"], version=version
         )
-        failed = [
-            check
-            for check in last_checks
-            if not check["passed"] and check["severity"] != "data-gap"
-        ]
-        if not failed:
-            return last_itinerary, last_checks, repair_iteration, "PASS", None
+        checks = _with_daily_schedule([r.model_dump() for r in results], first_checks)
+        if not changes:
+            break  # nothing more this repair can do
+        score = violation_score(checks)
+        if score < best_score:
+            best_score, stalls = score, 0
+        else:
+            stalls += 1
+            if stalls >= 2:
+                break  # not getting better (thrashing guard)
 
-        if repair_iteration == MAX_REPAIR_ITERATIONS:
-            break
-
-        signature = (
-            tuple(
-                tuple(activity.get("place_id") for activity in day["activities"])
-                for day in last_itinerary["days"]
-            ),
-            tuple((check["rule"], tuple(check["activity_ids"])) for check in failed),
-        )
-        if signature == previous_signature:
-            break
-        previous_signature = signature
-        repaired_candidates = _repair_candidates(trip, candidates, last_itinerary, failed)
-        if [place.get("id") for place in repaired_candidates] == [
-            place.get("id") for place in candidates
-        ]:
-            break
-        candidates = repaired_candidates
-
-    explanation = "Plan remains infeasible after up to 3 repair attempts: " + " ".join(
-        check["message"]
-        for check in last_checks
-        if not check["passed"] and check["severity"] != "data-gap"
+    itinerary["validation"] = checks
+    itinerary["score"] = 1.0 if all(c["passed"] for c in checks) else 0.5
+    if not hard_failures(checks):
+        return itinerary, checks, iterations, "PASS", None
+    explanation = (
+        f"Plan remains infeasible after {iterations} repair attempt(s): "
+        + " ".join(c["message"] for c in hard_failures(checks))
     )
-    return last_itinerary, last_checks, repair_iteration, "INFEASIBLE", explanation
+    return itinerary, checks, iterations, "INFEASIBLE", explanation

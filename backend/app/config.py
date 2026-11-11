@@ -13,6 +13,8 @@ MAX_CLARIFICATION_ATTEMPTS = 2
 MAX_FIND_ATTEMPTS = 3
 # Discovery agent: the most place searches it may make for one trip.
 MAX_DISCOVERY_CALLS = 8
+# L3 loop: repair tries after the first plan (docs/03 5.3, SRS FR-16).
+MAX_REPAIR_ITERATIONS = 3
 
 # Longest wait for one Gemini answer before giving up (each retry gets its own limit).
 GEMINI_TIMEOUT_SECONDS = 20
