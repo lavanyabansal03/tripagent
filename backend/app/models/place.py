@@ -30,7 +30,7 @@ class Place(BaseModel):
 
     # Basic information
     id: str = Field(min_length=1)
-    sources: list[Literal["mapbox", "foursquare", "seed"]]
+    sources: list[Literal["mapbox", "foursquare", "geoapify", "seed"]]
     provider_ids: dict[str, str] = Field(default_factory=dict)
 
     name: str = Field(min_length=1)

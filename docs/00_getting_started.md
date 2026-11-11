@@ -28,7 +28,7 @@ Each person owns one area but helps the others. Roles: **Preferences - Kaleb**, 
 | Preferences | The part that reads what the user typed and turns it into clear settings (likes, dislikes, budget, pace). | Write 10 example trip descriptions and what the app should understand from each. |
 | Validation | The rules that check the plan: no overlaps, open when we visit, under budget, not too far apart. | Turn the data shapes we agreed into Pydantic models (Trip, Preferences, Place, Activity) by Wednesday. |
 | Agent Graph | The "brain" that runs the steps in order and repeats a step when the plan fails a check. | Build a tiny LangGraph example with a loop that stops after 3 tries. |
-| Tools | The backend API and the connections to Mapbox (maps, travel time) and Foursquare (place details). | Build POST /api/trips to save a trip, and test Mapbox and Foursquare for 30 places. |
+| Tools | The backend API and the connections to Geoapify (places, opening hours) and Mapbox (maps, travel time). | Build POST /api/trips to save a trip, and test Geoapify and Mapbox for 30 places. |
 | Frontend & Maps | Everything the user sees: the trip form, the plan, and the map. | Sketch the 3 main screens, then build the trip form with the big "Tell us more" box. |
 
 ## Tech stack
@@ -41,7 +41,7 @@ Each person owns one area but helps the others. Roles: **Preferences - Kaleb**, 
 | AI steps | LangGraph + Gemini API (free) | Runs the agent steps and understands text |
 | Data checks | Pydantic | Makes sure data has the right shape |
 | Database | SQLite (on laptop), Postgres (online) | Saves trips and plans |
-| Maps and places | Mapbox + Foursquare | Real places, travel times, the map |
+| Maps and places | Geoapify + Mapbox (Transitous for transit) | Real places, travel times, the map |
 | Frontend | Svelte + Vite + TypeScript | The website |
 | Tests | pytest (backend), Vitest (frontend) | Checks our code still works |
 
@@ -79,7 +79,7 @@ frontend/src/  components, pages, styles                         docs/  our docu
 
 ### 4. Settings and keys
 
-Copy `.env.example` to `.env`. Start with `DEMO_MODE=true`, which uses saved sample data, so you do not need any API keys on day one. Get your own free Gemini key in Google AI Studio (your own project). Mapbox and Foursquare keys are shared privately by the lead. **Never put keys in GitHub.** The `.env` file is already in `.gitignore`.
+Copy `.env.example` to `.env`. Start with `DEMO_MODE=true`, which uses saved sample data, so you do not need any API keys on day one. Get your own free Gemini key in Google AI Studio (your own project), and optionally a free NVIDIA key at build.nvidia.com as the backup LLM (`NVIDIA_API_KEY`; `LLM_PRIMARY` picks which goes first). Mapbox and Geoapify keys are shared privately by the lead. **Never put keys in GitHub.** The `.env` file is already in `.gitignore`.
 
 ## How we work with Git
 

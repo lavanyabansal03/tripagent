@@ -526,7 +526,7 @@ The budget validator checks the sum of upper-bound estimates against the budget 
 
 **Context:** The original plan used React. The Frontend & Maps Eng. had already started the UI in Svelte, and `main` only had a React hello-world, so switching cost almost nothing.
 
-**Decision:** Svelte + Vite + TypeScript. The backend contract (REST under `/api`) is unchanged. Mapbox GL JS is used directly (it does not depend on a framework). Component tests use Vitest + Svelte Testing Library; type checks use `svelte-check`; lint uses ESLint with `eslint-plugin-svelte`.
+**Decision:** Svelte + Vite + TypeScript. The backend contract (REST under `/api`) is unchanged. Mapbox GL JS is used directly (it does not depend on a framework). Component tests use Vitest + Svelte Testing Library; type checks use `svelte-check`; lint uses oxlint.
 
 **Consequences:** fewer ready-made React components and map wrappers, so some UI pieces are written by hand; the component specs in the Design System doc still apply (props become Svelte component props). Revisit only if the frontend owner changes.
 

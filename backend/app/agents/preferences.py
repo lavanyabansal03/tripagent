@@ -5,7 +5,7 @@ from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, Field
 
-from app.config import GEMINI_TIMEOUT_SECONDS, settings
+from app.config import GEMINI_TIMEOUT_SECONDS, LLM_MAX_TRIES, settings
 
 
 class Preferences(BaseModel):
@@ -82,11 +82,11 @@ def extract_preferences(trip_description: str) -> Preferences | None:
 
 # Gemini answers 429 (too many requests) or 503 (busy) on the free tier.
 RETRY_CODES = {429, 503}
-MAX_TRIES = 4
+MAX_TRIES = LLM_MAX_TRIES  # from config.py
 
 
 def call_with_retry(call, sleep=time.sleep):
-    """Run call(); on 429/503 wait 2, 4, 8 seconds and try again (MAX_TRIES in total)."""
+    """Run call(); on 429/503 wait 2, then 4 seconds and try again (MAX_TRIES in total)."""
     for attempt in range(MAX_TRIES):
         try:
             return call()

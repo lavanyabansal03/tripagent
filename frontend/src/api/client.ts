@@ -22,6 +22,14 @@ import * as mock from './mock/engine'
 export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false'
 
 /**
+ * Changing a plan (Adjust trip, Swap to a backup, Undo, Mix it up) needs the
+ * L4 endpoints: /changes, /activities/{id}/swap, /versions/{v}/restore and
+ * /simulate. The backend does not have them yet, so these actions only work on
+ * the demo engine. Set this to true once those endpoints exist.
+ */
+export const CHANGES_AVAILABLE = DEMO_MODE
+
+/**
  * API origin. In development the Vite proxy forwards `/api` to the backend, so
  * a relative base works. On a static host (Render/Vercel/Netlify) there is no
  * proxy, so `VITE_API_BASE` points at the deployed backend.

@@ -82,7 +82,7 @@ Each provider adapter is tested against recorded real responses stored under `ba
 | 429 / 5xx | Retry twice with backoff, then fallback path. |
 | 400 bad request | No retry; typed error; key not in message. |
 | Matrix larger than provider limit | Adapter batches requests and merges. |
-| Same venue from Mapbox and Foursquare | Merged into one Place; per-field provenance kept. |
+| Same venue found twice (two searches or two providers) | Merged into one Place; sources and per-field provenance kept. |
 | Premium budget exceeded | No further Premium calls; remaining places marked with unknown fields. |
 
 Fixtures are refreshed once per sprint with a script so tests do not drift from reality.

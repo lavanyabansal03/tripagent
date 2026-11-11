@@ -20,6 +20,9 @@ MAX_DISCOVERY_CALLS = 8
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15
 
+# LLM calls (Gemini and NVIDIA): tries per call on 429/503, i.e. 2 retries, then the
+# other LLM is the fallback (docs/03 L6 "2 retries + 1 fallback").
+LLM_MAX_TRIES = 3
 # Longest wait for one Gemini answer before giving up (each retry gets its own limit).
 GEMINI_TIMEOUT_SECONDS = 20
 # Same idea for the NVIDIA backup LLM.
@@ -40,7 +43,6 @@ class Settings(BaseSettings):
     # Which LLM to try first: "gemini" (default) or "nvidia". The other is the backup.
     LLM_PRIMARY: Literal["gemini", "nvidia"] = "gemini"
     MAPBOX_SECRET_TOKEN: str = ""
-    FOURSQUARE_API_KEY: str = ""
     # Place search (free plan, no card). Used only when DEMO_MODE is false.
     GEOAPIFY_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./tripagent.db"

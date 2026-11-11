@@ -95,7 +95,7 @@ export interface TripRequirements {
 
 export interface Place {
   id: string
-  sources: Array<'mapbox' | 'foursquare' | 'seed'>
+  sources: Array<'mapbox' | 'foursquare' | 'geoapify' | 'seed'>
   provider_ids: Record<string, string>
   name: string
   categories: string[]

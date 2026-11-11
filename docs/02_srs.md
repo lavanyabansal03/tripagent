@@ -260,12 +260,12 @@ The **current, implemented** data shapes live in `docs/contracts.md` and the Pyd
 |---|---|---|
 | Language | Python 3.12 | Backend, agents, validators, tools. |
 | Orchestration | LangGraph | State graph, conditional edges, checkpoints, interrupts. |
-| LLM | Google Gemini API, free tier (Flash models) via google-genai and langchain-google-genai; structured output with Pydantic | Extraction, ordering proposals, repair choice, explanations. See ADR-007. |
+| LLM | Google Gemini API, free tier (Flash models) via google-genai; NVIDIA Nemotron as backup (ADR-009); structured output with Pydantic | Extraction, ordering proposals, repair choice, explanations. See ADR-007, ADR-009. |
 | API | FastAPI + Pydantic | REST API and typed contracts. |
 | Persistence | SQLAlchemy + Alembic; SQLite (dev), Postgres (prod) | Trips, versions, events. |
 | Code layout | backend/app/{api,agents,graph,tools,validation,models}, frontend/src | All API routes under the /api prefix. |
 | Maps and routing | Mapbox (Search, Directions, Matrix, GL JS) | Geometry, travel times, matrices, map rendering. |
-| POI enrichment | Foursquare Places API (ADR-003) | Hours, price level, ratings, review counts, popularity, tips. |
+| POI enrichment | Geoapify Places (OpenStreetMap data; ADR-010, replaced Foursquare) | Places and opening hours. No ratings, review counts or prices (kept unknown). |
 | Events (P1) | Decision in Sprint 2 spike | Current events. |
 | Frontend | Svelte + Vite + TypeScript | UI. See ADR-008. |
 | Testing | pytest, Vitest + Svelte Testing Library, Playwright | Unit to end-to-end. |

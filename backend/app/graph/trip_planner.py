@@ -202,10 +202,40 @@ def build_trip_graph(
         return _find_places(state, search)
 
     def plan_node(state: TripState) -> dict[str, Any]:
+        trip = state.get("trip", {})
+        backup_counts: list[int] = []
+        backup_errors: list[str] = []
+
+        def add_backups(itinerary: dict[str, Any]) -> int:
+            # A4 runs before Repair so Repair can try stored backups first (docs/03 5.3).
+            # A failure only means no backups; the plan itself is still good.
+            try:
+                count = attach_backups(itinerary, trip)
+            except Exception as error:
+                backup_errors.append(str(error))
+                return 0
+            backup_counts.append(count)
+            return count
+
         itinerary, validation, repair_iterations, terminal, explanation = build_plan_with_repairs(
-            state.get("trip", {}), state.get("places", [])
+            trip, state.get("places", []), add_backups=add_backups
         )
         logs = _log(state, "planner", "Built a day-by-day itinerary")
+        if backup_errors:
+            logs = _log(
+                {**state, "logs": logs},
+                "backup",
+                "Backup search failed; the plan has no backups",
+                event_type="tool",
+                error=backup_errors[-1],
+            )
+        else:
+            logs = _log(
+                {**state, "logs": logs},
+                "backup",
+                f"Found {backup_counts[-1] if backup_counts else 0} backups",
+                event_type="tool",
+            )
         for iteration in range(1, repair_iterations + 1):
             logs = _log(
                 {**state, "logs": logs},
@@ -213,24 +243,6 @@ def build_trip_graph(
                 "Replaced or rearranged activities and reran validation",
                 iteration=iteration,
                 event_type="loop",
-            )
-        # A4: store up to two backups on each important activity. A failure here
-        # only means no backups; the plan itself is still good.
-        try:
-            backup_count = attach_backups(itinerary, state.get("trip", {}))
-            logs = _log(
-                {**state, "logs": logs},
-                "backup",
-                f"Found {backup_count} backups",
-                event_type="tool",
-            )
-        except Exception as error:
-            logs = _log(
-                {**state, "logs": logs},
-                "backup",
-                "Backup search failed; the plan has no backups",
-                event_type="tool",
-                error=str(error),
             )
         validation_logs = _log(
             {**state, "logs": logs},

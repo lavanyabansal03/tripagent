@@ -16,12 +16,14 @@
   interface Props {
     activity: Activity
     onswap?: (backupId: string, placeName: string) => void
+    /** False while the backend cannot swap yet (live mode); backups stay visible. */
+    canSwap?: boolean
     onlocktoggle?: (activityId: string) => void
     onfocusmap?: (place: Place) => void
     busy?: boolean
   }
 
-  let { activity, onswap, onlocktoggle, onfocusmap, busy = false }: Props = $props()
+  let { activity, onswap, onlocktoggle, onfocusmap, busy = false, canSwap = true }: Props = $props()
 
   const place = $derived(activity.place)
   const category = $derived(place.experience_types[0] as ExperienceCategory)
@@ -142,7 +144,7 @@
   </div>
 
   {#if !done && !locked && activity.priority !== 'low' && onswap}
-    <BackupDrawer {activity} onswap={onswap} disabled={busy} />
+    <BackupDrawer {activity} onswap={onswap} disabled={busy || !canSwap} />
   {/if}
 </article>
 

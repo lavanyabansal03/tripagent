@@ -32,8 +32,8 @@ one. Grow toward 9.1 only when a story needs it.
 
 ## Stack
 - Backend: Python 3.12, FastAPI, Pydantic v2, LangGraph, SQLAlchemy (SQLite locally)
-- LLM: **Google Gemini API, free tier, Flash models** via `google-genai` /
-  `langchain-google-genai`. **Never use OpenAI.** Model names live in `backend/app/config.py`.
+- LLM: **Google Gemini API, free tier, Flash models** via `google-genai`.
+  **Never use OpenAI.** Model names live in `backend/app/config.py`.
   Backup LLM: NVIDIA Nemotron (build.nvidia.com) over plain HTTP; `LLM_PRIMARY` picks the order (ADR-009).
 - Places and maps: Geoapify (places, opening hours) + Mapbox (routing, travel times, map);
   Transitous for transit times (ADR-010; replaced Foursquare)
@@ -44,7 +44,7 @@ one. Grow toward 9.1 only when a story needs it.
 ```
 backend/app/
   api/         FastAPI routes, all under /api          (Tools Eng.)
-  agents/      LLM-backed steps (intake, planner, ...)  (Preferences + Agent Graph Eng.)
+  agents/      agent steps A1-A7 (LLM only where useful) (Preferences + Agent Graph Eng.)
   graph/       LangGraph workflow, state, routing       (Agent Graph Eng.)
   tools/       Geoapify/Mapbox adapters + mocks         (Tools Eng.)
   validation/  pure-function validators                (Validation Eng.)
@@ -65,7 +65,7 @@ ruff check . && pytest
 
 # frontend (from frontend/)
 npm install && npm run dev           # http://localhost:5173
-npm test && npm run build
+npm run lint && npm run check && npm test && npm run build
 ```
 
 ## Rules that always apply
