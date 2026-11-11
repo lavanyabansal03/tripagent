@@ -2,17 +2,23 @@
 #
 # Apply it at: Render Dashboard -> New + -> Blueprint -> connect this repo -> Apply.
 # It creates two services:
-#   tripagent-api  — FastAPI backend (web service)
-#   tripagent-web  — Svelte frontend (static site), running in demo mode
+#   tripagent-api-<owner>  — FastAPI backend (web service)
+#   tripagent-web-<owner>  — Svelte frontend (static site)
+#
+# The names include the repo owner because `onrender.com` subdomains are global:
+# `tripagent-web` and `tripagent-api` are already used by other accounts, so a
+# generic name would collide (or quietly point the frontend at someone else's
+# service). If Render reports a name is taken, change it in BOTH services below
+# — the frontend's VITE_API_BASE follows the API service by name.
 #
 # Free plan notes: the web service spins down after ~15 min idle, so the first
 # request after a pause takes a few seconds. The static site is always fast.
 # Secrets are `sync: false`, so Render prompts for them and never stores them in
-# the repo. Leave the optional provider keys blank while DEMO_MODE=true.
+# the repo.
 
 services:
   - type: web
-    name: tripagent-api
+    name: tripagent-api-lavanyabansal03
     runtime: python
     plan: free
     rootDir: backend
@@ -23,12 +29,14 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
+      # true = use the recorded/mock providers (no keys needed). Set to false
+      # once the provider keys below are supplied and the live tools are wired.
       - key: DEMO_MODE
         value: "true"
       - key: DATABASE_URL
         value: sqlite:///./tripagent.db
       # The API has no cookies/auth, so any origin may call it. Tighten to the
-      # frontend URL once it is known, e.g. https://tripagent-web.onrender.com
+      # frontend URL once it is known.
       - key: CORS_ORIGINS
         value: "*"
       - key: GOOGLE_API_KEY
@@ -39,7 +47,7 @@ services:
         sync: false
 
   - type: web
-    name: tripagent-web
+    name: tripagent-web-lavanyabansal03
     runtime: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
@@ -48,14 +56,18 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      # Demo mode keeps the public demo working before the trip endpoints land.
-      # Set to false once the backend implements POST /api/trips and friends.
+      # true = the app runs on recorded data (full flow, works without the API).
+      # Set to false to call the live API; the header then shows the backend
+      # status and the "Demo mode" note/badge disappear.
       - key: VITE_DEMO_MODE
         value: "true"
-      # Default Render URL for the API service above. Update if you rename the
-      # service or attach a custom domain.
+      # Resolved to the API service's host (e.g. tripagent-api-xxx.onrender.com).
+      # The client adds https:// when the scheme is missing.
       - key: VITE_API_BASE
-        value: https://tripagent-api.onrender.com
+        fromService:
+          type: web
+          name: tripagent-api-lavanyabansal03
+          property: host
       # Public, URL-restricted Mapbox token (safe to expose). Optional.
       - key: VITE_MAPBOX_PUBLIC_TOKEN
         sync: false
