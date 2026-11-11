@@ -24,10 +24,16 @@ export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false'
 /**
  * API origin. In development the Vite proxy forwards `/api` to the backend, so
  * a relative base works. On a static host (Render/Vercel/Netlify) there is no
- * proxy, so `VITE_API_BASE` points at the deployed backend (e.g.
- * https://tripagent-api.onrender.com). Empty -> same-origin `/api`.
+ * proxy, so `VITE_API_BASE` points at the deployed backend.
+ *
+ * Render Blueprints can pass this as a bare host via `fromService` (e.g.
+ * `tripagent-api-x.onrender.com`), so a missing scheme is treated as https.
+ * Empty -> same-origin `/api`.
  */
-export const API_ORIGIN = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '')
+const rawApiBase = (import.meta.env.VITE_API_BASE ?? '').trim()
+export const API_ORIGIN = rawApiBase
+  ? `${/^https?:\/\//i.test(rawApiBase) ? '' : 'https://'}${rawApiBase}`.replace(/\/+$/, '')
+  : ''
 const BASE = `${API_ORIGIN}/api`
 
 export interface HealthStatus {
@@ -66,12 +72,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   createTrip(input: TripFormInput): Promise<CreateTripResponse> {
     if (DEMO_MODE) return Promise.resolve(mock.createTrip(input))
-    // The backend rejects unknown fields (422) and does not use `touched` yet,
-    // so only the demo engine gets it. Send it once the API accepts it.
-    const { touched: _touched, ...body } = input
+    // `touched` tells the backend which values the traveller chose, so a number
+    // in the "Tell us more" note can replace a form default they never changed.
     return request<CreateTripResponse>('/trips', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(input),
     })
   },
 

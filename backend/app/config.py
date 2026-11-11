@@ -11,6 +11,11 @@ from pydantic_settings import BaseSettings
 # Hard caps for graph loops; keep every retry/clarification path bounded.
 MAX_CLARIFICATION_ATTEMPTS = 2
 MAX_FIND_ATTEMPTS = 3
+# Discovery agent: the most place searches it may make for one trip.
+MAX_DISCOVERY_CALLS = 8
+
+# Longest wait for one Gemini answer before giving up (each retry gets its own limit).
+GEMINI_TIMEOUT_SECONDS = 20
 
 # The .env file lives at the repo root (one level above backend/).
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -21,6 +26,8 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.8-flash"
     MAPBOX_SECRET_TOKEN: str = ""
     FOURSQUARE_API_KEY: str = ""
+    # Place search (free plan, no card). Used only when DEMO_MODE is false.
+    GEOAPIFY_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./tripagent.db"
     DEMO_MODE: bool = True
     # Comma-separated browser origins allowed to call the API. Use "*" to allow

@@ -1,0 +1,499 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Howdy Y'all Coffee",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98164",
+    "district": "West Edge",
+    "street": "4th Avenue",
+    "housenumber": "1000",
+    "iso3166_2": "US-WA",
+    "lon": -122.3322194,
+    "lat": 47.6065451,
+    "state_code": "WA",
+    "formatted": "Howdy Y'all Coffee, 1000 4th Avenue, Seattle, WA 98164, United States of America",
+    "address_line1": "Howdy Y'all Coffee",
+    "address_line2": "1000 4th Avenue, Seattle, WA 98164, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe",
+     "catering.cafe.coffee",
+     "catering.cafe.coffee_shop"
+    ],
+    "details": [
+     "details",
+     "details.catering"
+    ],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6065451,
+      "lon": -122.3322194,
+      "city": "Seattle",
+      "name": "Howdy Y'all Coffee",
+      "level": 2,
+      "state": "WA",
+      "osm_id": 3435946993,
+      "street": "4th Avenue",
+      "amenity": "cafe",
+      "cuisine": "coffee_shop",
+      "website": "https://www.howdyyallcoffee.com",
+      "osm_type": "n",
+      "instagram": "howdyyallcoffee",
+      "housenumber": 1000,
+      "opening_hours": "Mo-Sa 10:00-16:00"
+     }
+    },
+    "website": "https://www.howdyyallcoffee.com",
+    "opening_hours": "Mo-Sa 10:00-16:00",
+    "catering": {
+     "cuisine": "coffee_shop"
+    },
+    "place_id": "513186281543955ec05947061445a3cd4740f00103f901f163cccc00000000920312486f776479205927616c6c20436f66666565"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3322194,
+     47.6065451
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Retro Coffee",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98104",
+    "district": "Central Business District",
+    "street": "5th Avenue",
+    "housenumber": "920",
+    "iso3166_2": "US-WA",
+    "lon": -122.3312427,
+    "lat": 47.6066338,
+    "state_code": "WA",
+    "formatted": "Retro Coffee, 920 5th Avenue, Seattle, WA 98104, United States of America",
+    "address_line1": "Retro Coffee",
+    "address_line2": "920 5th Avenue, Seattle, WA 98104, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe",
+     "catering.cafe.coffee",
+     "catering.cafe.coffee_shop"
+    ],
+    "details": [
+     "details",
+     "details.catering",
+     "details.facilities"
+    ],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6066338,
+      "lon": -122.3312427,
+      "city": "Seattle",
+      "name": "Retro Coffee",
+      "unit": 150,
+      "state": "WA",
+      "osm_id": 8544921217,
+      "street": "5th Avenue",
+      "amenity": "cafe",
+      "cuisine": "coffee_shop",
+      "osm_type": "n",
+      "postcode": 98104,
+      "housenumber": 920,
+      "opening_hours": "Mo-Fr 06:00-17:00, Sa-Su 07:00-13:00",
+      "indoor_seating": "yes",
+      "outdoor_seating": "no"
+     }
+    },
+    "opening_hours": "Mo-Fr 06:00-17:00, Sa-Su 07:00-13:00",
+    "facilities": {
+     "outdoor_seating": false
+    },
+    "catering": {
+     "cuisine": "coffee_shop"
+    },
+    "place_id": "517be2941433955ec059f8d2252da6cd4740f00103f901812651fd0100000092030c526574726f20436f66666565"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3312427,
+     47.6066338
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Belle Epicurean",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98104",
+    "district": "West Edge",
+    "street": "4th Avenue",
+    "housenumber": "925",
+    "iso3166_2": "US-WA",
+    "lon": -122.333238,
+    "lat": 47.6057382,
+    "state_code": "WA",
+    "formatted": "Belle Epicurean, 925 4th Avenue, Seattle, WA 98104, United States of America",
+    "address_line1": "Belle Epicurean",
+    "address_line2": "925 4th Avenue, Seattle, WA 98104, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe",
+     "commercial",
+     "commercial.food_and_drink",
+     "commercial.food_and_drink.bakery"
+    ],
+    "details": [
+     "details"
+    ],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6057382,
+      "lon": -122.333238,
+      "city": "Seattle",
+      "name": "Belle Epicurean",
+      "shop": "bakery",
+      "state": "WA",
+      "osm_id": 5750021212,
+      "street": "4th Avenue",
+      "amenity": "cafe",
+      "website": "https://www.belleepicurean.com/",
+      "osm_type": "n",
+      "postcode": 98104,
+      "housenumber": 925,
+      "opening_hours": "Mo-Fr 07:00+"
+     }
+    },
+    "website": "https://www.belleepicurean.com/",
+    "opening_hours": "Mo-Fr 07:00+",
+    "commercial": {
+     "type": "bakery"
+    },
+    "place_id": "5134f279c553955ec0590d784fd488cd4740f00103f9015c5cba560100000092030f42656c6c652045706963757265616e"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.333238,
+     47.6057382
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Joelle's Espresso Shop",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98154",
+    "district": "Central Business District",
+    "street": "4th Avenue",
+    "housenumber": "1001",
+    "iso3166_2": "US-WA",
+    "lon": -122.3336691,
+    "lat": 47.6059612,
+    "state_code": "WA",
+    "formatted": "Joelle's Espresso Shop, 1001 4th Avenue, Seattle, WA 98154, United States of America",
+    "address_line1": "Joelle's Espresso Shop",
+    "address_line2": "1001 4th Avenue, Seattle, WA 98154, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe",
+     "catering.cafe.coffee",
+     "catering.cafe.coffee_shop"
+    ],
+    "details": [
+     "details.catering"
+    ],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6059612,
+      "lon": -122.3336691,
+      "city": "Seattle",
+      "name": "Joelle's Espresso Shop",
+      "state": "WA",
+      "osm_id": 3656189725,
+      "street": "4th Avenue",
+      "amenity": "cafe",
+      "cuisine": "coffee_shop",
+      "osm_type": "n",
+      "postcode": 98154,
+      "_inherited": "",
+      "housenumber": 1001
+     }
+    },
+    "catering": {
+     "cuisine": "coffee_shop"
+    },
+    "place_id": "51e30ba4d55a955ec0598d52f82290cd4740f00103f9011d07edd9000000009203164a6f656c6c65277320457370726573736f2053686f70"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3336691,
+     47.6059612
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Provisions Cafe",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98101",
+    "district": "Central Business District",
+    "street": "4th Avenue",
+    "housenumber": "1100",
+    "iso3166_2": "US-WA",
+    "lon": -122.3334847,
+    "lat": 47.6069882,
+    "state_code": "WA",
+    "formatted": "Provisions Cafe, 1100 4th Avenue, Seattle, WA 98101, United States of America",
+    "address_line1": "Provisions Cafe",
+    "address_line2": "1100 4th Avenue, Seattle, WA 98101, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe"
+    ],
+    "details": [],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6069882,
+      "lon": -122.3334847,
+      "city": "Seattle",
+      "name": "Provisions Cafe",
+      "state": "WA",
+      "osm_id": 3655991029,
+      "street": "4th Avenue",
+      "amenity": "cafe",
+      "osm_type": "n",
+      "postcode": 98101,
+      "housenumber": 1100
+     }
+    },
+    "place_id": "51d90d36d057955ec0596a0712cab1cd4740f00103f901f5fee9d90000000092030f50726f766973696f6e732043616665"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3334847,
+     47.6069882
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Market Fresh",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98104",
+    "district": "Central Business District",
+    "street": "4th Avenue",
+    "housenumber": "925",
+    "iso3166_2": "US-WA",
+    "lon": -122.3336405,
+    "lat": 47.605556,
+    "state_code": "WA",
+    "formatted": "Market Fresh, 925 4th Avenue, Seattle, WA 98104, United States of America",
+    "address_line1": "Market Fresh",
+    "address_line2": "925 4th Avenue, Seattle, WA 98104, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe"
+    ],
+    "details": [
+     "details"
+    ],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.605556,
+      "lon": -122.3336405,
+      "city": "Seattle",
+      "name": "Market Fresh",
+      "state": "WA",
+      "osm_id": 3655991527,
+      "street": "4th Avenue",
+      "amenity": "cafe",
+      "osm_type": "n",
+      "postcode": 98104,
+      "_inherited": "",
+      "description": "Buffet Style Service",
+      "housenumber": 925,
+      "opening_hours": "Mo-Fr 07:00-22:00,10:30-14:00"
+     }
+    },
+    "opening_hours": "Mo-Fr 07:00-22:00,10:30-14:00",
+    "description": "Buffet Style Service",
+    "place_id": "51c007af5d5a955ec059c3f2e7db82cd4740f00103f901e700ead90000000092030c4d61726b6574204672657368"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3336405,
+     47.605556
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Fourth & Madison Plaza",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98154",
+    "suburb": "First Hill",
+    "housenumber": "925",
+    "iso3166_2": "US-WA",
+    "lon": -122.3332622,
+    "lat": 47.6052002,
+    "state_code": "WA",
+    "formatted": "Fourth & Madison Plaza, 925, Seattle, WA 98154, United States of America",
+    "address_line1": "Fourth & Madison Plaza",
+    "address_line2": "925, Seattle, WA 98154, United States of America",
+    "categories": [
+     "leisure",
+     "leisure.park"
+    ],
+    "details": [
+     "details"
+    ],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6052002,
+      "lon": -122.3332622,
+      "name": "Fourth & Madison Plaza",
+      "osm_id": 14104352506,
+      "street": "4th Avenue",
+      "leisure": "park",
+      "osm_type": "n",
+      "check_date": "2026-08-18",
+      "housenumber": 925,
+      "opening_hours": "Mo-Fr 07:00-17:30",
+      "check_date:opening_hours": "2026-08-18"
+     }
+    },
+    "opening_hours": "Mo-Fr 07:00-17:30",
+    "place_id": "518d7ffa2a54955ec0592e443d3377cd4740f00103f901fa56af4803000000920316466f757274682026204d616469736f6e20506c617a61"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3332622,
+     47.6052002
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "DelinoMore",
+    "country": "United States",
+    "country_code": "us",
+    "state": "Washington",
+    "county": "King County",
+    "city": "Seattle",
+    "postcode": "98154",
+    "district": "Central Business District",
+    "suburb": "First Hill",
+    "street": "5th Avenue",
+    "housenumber": "1118",
+    "iso3166_2": "US-WA",
+    "lon": -122.3327627,
+    "lat": 47.6078481,
+    "state_code": "WA",
+    "formatted": "DelinoMore, 1118 5th Avenue, Seattle, WA 98154, United States of America",
+    "address_line1": "DelinoMore",
+    "address_line2": "1118 5th Avenue, Seattle, WA 98154, United States of America",
+    "categories": [
+     "catering",
+     "catering.cafe"
+    ],
+    "details": [],
+    "datasource": {
+     "sourcename": "openstreetmap",
+     "attribution": "© OpenStreetMap contributors",
+     "license": "Open Database License",
+     "url": "https://www.openstreetmap.org/copyright",
+     "raw": {
+      "lat": 47.6078481,
+      "lon": -122.3327627,
+      "name": "DelinoMore",
+      "state": "WA",
+      "osm_id": 4639109903,
+      "street": "5th Avenue",
+      "amenity": "cafe",
+      "osm_type": "n",
+      "housenumber": 1118
+     }
+    },
+    "place_id": "510975ecfb4b955ec059c6376ff7cdcd4740f00103f9010f3383140100000092030a44656c696e6f4d6f7265"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -122.3327627,
+     47.6078481
+    ]
+   }
+  }
+ ]
+}

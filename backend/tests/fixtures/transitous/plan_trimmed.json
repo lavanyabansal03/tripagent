@@ -1,0 +1,42 @@
+{
+ "itineraries": [
+  {
+   "duration": 1080,
+   "transfers": 0
+  },
+  {
+   "duration": 1140,
+   "transfers": 0
+  },
+  {
+   "duration": 1140,
+   "transfers": 0
+  },
+  {
+   "duration": 1140,
+   "transfers": 0
+  },
+  {
+   "duration": 1080,
+   "transfers": 0
+  },
+  {
+   "duration": 1080,
+   "transfers": 0
+  },
+  {
+   "duration": 1140,
+   "transfers": 0
+  },
+  {
+   "duration": 1080,
+   "transfers": 0
+  }
+ ],
+ "direct": [
+  {
+   "duration": 1404
+  }
+ ],
+ "note": "Trimmed from a real Transitous answer (Pike Place Market to Space Needle, 2026-10-15)."
+}

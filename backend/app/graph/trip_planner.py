@@ -9,9 +9,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-from app.agents.planner import plan_and_validate
+from app.agents.discovery import discover_places
+from app.agents.planner import build_plan_with_repairs
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
-from app.tools import get_place_search
 
 
 class TripState(TypedDict, total=False):
@@ -30,6 +30,9 @@ class TripState(TypedDict, total=False):
     run_id: str
     itinerary: dict[str, Any]
     validation: list[dict[str, Any]]
+    terminal: str
+    explanation: str
+    repair_iterations: int
 
 
 def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict[str, Any]]:
@@ -133,18 +136,14 @@ def _sample_places(trip: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def _search_places(trip: dict[str, Any]) -> list[dict[str, Any]]:
-    """Use the shared place-search adapter; Seattle fixtures remain demo-safe."""
-    interests = trip.get("interests", [])
-    query = " ".join(interests) if interests else ""
-    places = get_place_search().search_places(
-        query=query,
-        categories=interests or None,
-        mode=trip.get("mode", "walking"),
-        limit=30,
-    )
-    if not places and query:
-        places = get_place_search().search_places(mode=trip.get("mode", "walking"), limit=30)
-    return [place.model_dump(mode="json") for place in places]
+    """Find candidates with the Discovery agent (one search per interest, capped).
+
+    It uses the shared place-search adapter, so DEMO_MODE stays on the Seattle fixtures.
+    """
+    result = discover_places(trip)
+    if result.status == "ERROR":
+        raise RuntimeError(result.reason)  # find_places retries, then explains the failure
+    return [place.model_dump(mode="json") for place in result.places]
 
 
 def _find_places(
@@ -202,19 +201,31 @@ def build_trip_graph(
         return _find_places(state, search)
 
     def plan_node(state: TripState) -> dict[str, Any]:
-        itinerary, validation = plan_and_validate(
+        itinerary, validation, repair_iterations, terminal, explanation = build_plan_with_repairs(
             state.get("trip", {}), state.get("places", [])
         )
-        planner_logs = _log(state, "planner", "Built a day-by-day itinerary")
+        logs = _log(state, "planner", "Built a day-by-day itinerary")
+        for iteration in range(1, repair_iterations + 1):
+            logs = _log(
+                {**state, "logs": logs},
+                "repair",
+                "Replaced or rearranged activities and reran validation",
+                iteration=iteration,
+                event_type="loop",
+            )
         validation_logs = _log(
-            {**state, "logs": planner_logs},
+            {**state, "logs": logs},
             "validator",
             f"Ran {len(validation)} itinerary checks",
             event_type="validation",
+            terminal=terminal,
         )
         return {
             "itinerary": itinerary,
             "validation": validation,
+            "repair_iterations": repair_iterations,
+            "terminal": terminal,
+            "explanation": explanation or "",
             "logs": validation_logs,
         }
 
@@ -232,7 +243,9 @@ def build_trip_graph(
                 "saved_trip": saved_trip,
                 "save_attempts": attempt,
                 "save_error": "",
-                "status": "completed",
+                "status": (
+                    "infeasible" if state.get("terminal") == "INFEASIBLE" else "completed"
+                ),
                 "logs": _log(state, "save", "Trip plan saved", attempt=attempt),
             }
         except Exception as error:  # Keep storage failures inside the bounded graph loop.
