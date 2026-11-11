@@ -436,7 +436,7 @@ Managed Postgres (SQLite in local dev)          Structured JSON logs -> host log
 
 ### ADR-003: Place and POI data provider
 
-**Status:** Accepted, pending Sprint 1 fill-rate spike (S0-05) | **Date:** October 5, 2026 | **Deciders:** Tech Lead, Tools Eng., Preferences Eng.
+**Status:** Accepted, pending Sprint 1 fill-rate spike (S0-05). The Foursquare part is superseded by ADR-010 (Geoapify). | **Date:** October 5, 2026 | **Deciders:** Tech Lead, Tools Eng., Preferences Eng.
 
 **Context:** Budget validation, opening-hours validation and the tourist/local balance need price level, hours, ratings, review counts and popularity for each place. Mapbox is strong for maps, routing and travel-time matrices but thinner on these venue attributes.
 
@@ -529,6 +529,26 @@ The budget validator checks the sum of upper-bound estimates against the budget 
 **Decision:** Svelte + Vite + TypeScript. The backend contract (REST under `/api`) is unchanged. Mapbox GL JS is used directly (it does not depend on a framework). Component tests use Vitest + Svelte Testing Library; type checks use `svelte-check`; lint uses ESLint with `eslint-plugin-svelte`.
 
 **Consequences:** fewer ready-made React components and map wrappers, so some UI pieces are written by hand; the component specs in the Design System doc still apply (props become Svelte component props). Revisit only if the frontend owner changes.
+
+### ADR-009: NVIDIA Nemotron as a backup LLM
+
+**Status:** Accepted | **Date:** November 11, 2026 | **Deciders:** Product Owner
+
+**Context:** In November the Gemini free tier was often overloaded (503, 504 and 429 answers, and calls that took over 90 seconds), so reading the "Tell us more" note failed. ADR-007 has no second provider.
+
+**Decision:** Gemini stays the default. NVIDIA Nemotron, through NVIDIA's hosted API (build.nvidia.com, free key), is the backup. `LLM_PRIMARY` in `.env` picks which one goes first; if it has no key or fails, the other is tried; if both fail, the trip is created from the form alone. NVIDIA's API uses the OpenAI request format, but it is called with a plain HTTP request (`httpx`), not the OpenAI library, so the "never use OpenAI" rule still holds. Both providers use the same prompt, and every answer is checked against the same Pydantic schema. The model name is `NVIDIA_MODEL` in `backend/app/config.py`; NVIDIA renames models often, so check build.nvidia.com when it stops working.
+
+**Consequences:** the note keeps working when one provider is down; one more optional key (`NVIDIA_API_KEY`); NVIDIA's free tier has its own limits, so the same retry-with-backoff and time limit apply; tests never call either provider (`tests/conftest.py`).
+
+### ADR-010: Geoapify replaces Foursquare for place data
+
+**Status:** Accepted (supersedes the Foursquare part of ADR-003) | **Date:** November 11, 2026 | **Deciders:** Product Owner, Tools Eng.
+
+**Context:** Foursquare's useful fields (hours, price, ratings) need a paid tier or a card. Geoapify has a free plan with no card and returns OpenStreetMap data, including opening hours.
+
+**Decision:** Place search uses Geoapify behind the same `PlaceSearch` interface (`backend/app/tools/geoapify.py`). Travel times use Mapbox Directions for walking, cycling and driving, and Transitous for transit. With `DEMO_MODE=true`, no key, or a provider error, the Seattle seed data and a straight-line estimate are used (option D stays as the demo and test fallback).
+
+**Consequences:** OpenStreetMap has no ratings, review counts or prices, so those stay `None` ("unknown"), and the tourist/local signals in ADR-003 fall back to "Unknown" where they need ratings. Opening hours are converted from OpenStreetMap text into `OpeningPeriod` only when the text can be read fully. One optional key: `GEOAPIFY_API_KEY`.
 
 ## 12. Reliability, Observability and Security
 

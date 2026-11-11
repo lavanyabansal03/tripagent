@@ -124,7 +124,7 @@ def test_create_trip_merges_extracted_preferences_without_overwriting_form_value
 ):
     monkeypatch.setattr(
         trips_api,
-        "extract_preferences",
+        "read_preferences",
         lambda _text: Preferences(
             interests=["coffee", "art"],
             avoid=["nightclubs", "bars"],
@@ -155,7 +155,7 @@ def test_create_trip_merges_extracted_preferences_without_overwriting_form_value
 def test_create_trip_uses_extracted_preferences_when_form_values_are_omitted(monkeypatch):
     monkeypatch.setattr(
         trips_api,
-        "extract_preferences",
+        "read_preferences",
         lambda _text: Preferences(
             interests=["coffee"], avoid=["crowds"], max_travel_min=18
         ),
@@ -180,7 +180,7 @@ def test_create_trip_continues_when_preference_extraction_fails(monkeypatch):
     def fail_extraction(_text):
         raise ValueError("GOOGLE_API_KEY is not set.")
 
-    monkeypatch.setattr(trips_api, "extract_preferences", fail_extraction)
+    monkeypatch.setattr(trips_api, "read_preferences", fail_extraction)
     response = client.post(
         "/api/trips",
         json={
@@ -213,7 +213,7 @@ FORM_DEFAULTS = {
 
 def fake_extraction(monkeypatch, **fields):
     monkeypatch.setattr(
-        trips_api, "extract_preferences", lambda _text: Preferences(**fields)
+        trips_api, "read_preferences", lambda _text: Preferences(**fields)
     )
 
 

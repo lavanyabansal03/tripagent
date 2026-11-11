@@ -34,7 +34,9 @@ one. Grow toward 9.1 only when a story needs it.
 - Backend: Python 3.12, FastAPI, Pydantic v2, LangGraph, SQLAlchemy (SQLite locally)
 - LLM: **Google Gemini API, free tier, Flash models** via `google-genai` /
   `langchain-google-genai`. **Never use OpenAI.** Model names live in `backend/app/config.py`.
-- Places and maps: Foursquare (venue details) + Mapbox (routing, travel times, map)
+  Backup LLM: NVIDIA Nemotron (build.nvidia.com) over plain HTTP; `LLM_PRIMARY` picks the order (ADR-009).
+- Places and maps: Geoapify (places, opening hours) + Mapbox (routing, travel times, map);
+  Transitous for transit times (ADR-010; replaced Foursquare)
 - Frontend: Svelte + Vite + TypeScript (ADR-008; replaced React)
 - Tests: pytest, Vitest; lint with ruff
 
@@ -44,7 +46,7 @@ backend/app/
   api/         FastAPI routes, all under /api          (Tools Eng.)
   agents/      LLM-backed steps (intake, planner, ...)  (Preferences + Agent Graph Eng.)
   graph/       LangGraph workflow, state, routing       (Agent Graph Eng.)
-  tools/       Foursquare/Mapbox adapters + mocks       (Tools Eng.)
+  tools/       Geoapify/Mapbox adapters + mocks         (Tools Eng.)
   validation/  pure-function validators                (Validation Eng.)
   models/      shared Pydantic models                   (Validation Eng.)
   config.py    settings from env (keys, DEMO_MODE, limits)

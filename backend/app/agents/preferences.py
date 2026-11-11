@@ -17,17 +17,9 @@ class Preferences(BaseModel):
     max_travel_min: int | None = None
 
 
-def extract_preferences(trip_description: str) -> Preferences | None:
-    if not settings.GOOGLE_API_KEY:
-        return None
-
-    # Without a time limit a stuck request would hang trip creation forever.
-    client = genai.Client(
-        api_key=settings.GOOGLE_API_KEY,
-        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
-    )
-
-    prompt = f"""
+def build_prompt(trip_description: str) -> str:
+    """Kaleb's extraction prompt, shared by Gemini and the NVIDIA backup."""
+    return f"""
 You are a travel preference extraction assistant.
 
 Read the user's trip description and extract these preferences:
@@ -55,6 +47,19 @@ Do not invent preferences. Use null for missing numeric values.
 User trip description:
 {trip_description}
 """
+
+
+def extract_preferences(trip_description: str) -> Preferences | None:
+    if not settings.GOOGLE_API_KEY:
+        return None
+
+    # Without a time limit a stuck request would hang trip creation forever.
+    client = genai.Client(
+        api_key=settings.GOOGLE_API_KEY,
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
+    )
+
+    prompt = build_prompt(trip_description)
 
     config = {
         "response_mime_type": "application/json",
