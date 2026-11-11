@@ -7,7 +7,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.agents.repair import hard_failures, repair_itinerary, violation_score
-from app.config import MAX_REPAIR_ITERATIONS
+from app.config import MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS
 from app.models.validation_result import ValidationResult
 from app.tools.base import LatLng, Mode
 from app.tools.mock_places import distance_km, rough_minutes
@@ -373,12 +373,29 @@ def _attach_day_warnings(itinerary: dict[str, Any], checks: list[dict[str, Any]]
         ]
 
 
+def _limited(choose: Callable[..., Any] | None, limit: int) -> Callable[..., Any] | None:
+    """Allow at most `limit` LLM choices per plan; after that Repair uses code's choice."""
+    if choose is None:
+        return None
+    calls = 0
+
+    def limited_choose(*args: Any) -> Any:
+        nonlocal calls
+        if calls >= limit:
+            return None
+        calls += 1
+        return choose(*args)
+
+    return limited_choose
+
+
 def build_plan_with_repairs(
     trip: dict[str, Any],
     places: list[dict[str, Any]],
     *,
     version: int = 1,
     add_backups: Callable[[dict[str, Any], set[str] | None], int] | None = None,
+    choose: Callable[..., Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int, str, str | None]:
     """L3 loop (docs/03 5.3): Planner -> Backup -> Validator -> Repair.
 
@@ -388,6 +405,7 @@ def build_plan_with_repairs(
     score stops improving twice in a row.
     """
     itinerary, first_checks = plan_and_validate(trip, places, version=version)
+    choose = _limited(choose, MAX_REPAIR_LLM_CALLS)
     if add_backups is not None:
         add_backups(itinerary, None)  # every activity
     checks = first_checks
@@ -398,7 +416,7 @@ def build_plan_with_repairs(
 
     while hard_failures(checks) and iterations < MAX_REPAIR_ITERATIONS:
         iterations += 1
-        changes = repair_itinerary(trip, itinerary, places)
+        changes = repair_itinerary(trip, itinerary, places, choose)
         for change in changes:
             change["iteration"] = iterations
         itinerary["repairs"].extend(changes)

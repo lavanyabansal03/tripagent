@@ -14,6 +14,9 @@ MAX_CLARIFICATION_ATTEMPTS = 2
 MAX_FIND_ATTEMPTS = 3
 # L3 loop: repair tries after the first plan (docs/03 5.3, SRS FR-16).
 MAX_REPAIR_ITERATIONS = 3
+# A6 Repair: valid replacements shown to the LLM, and LLM choices per plan.
+REPAIR_OPTIONS_FOR_LLM = 4
+MAX_REPAIR_LLM_CALLS = 5
 # Discovery agent: the most place searches it may make for one trip.
 MAX_DISCOVERY_CALLS = 8
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
