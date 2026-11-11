@@ -1,0 +1,156 @@
+"""Discovery agent: find enough candidate places for a trip, one interest at a time.
+
+This is a bounded tool loop with no LLM (the rule: deterministic code decides).
+  1. One focused search per interest ("museum" in the museum category).
+  2. For interests that came back with too few places, one wider search (any category).
+  3. Merge duplicates (same id, or a very similar name less than 50 m away).
+It stops at a hard cap of search calls (MAX_DISCOVERY_CALLS in config.py) and always ends
+in a named state:
+  PASS        every interest has at least MIN_PER_INTEREST places
+  INFEASIBLE  we stopped (cap reached or nothing new found) with some interests short
+  ERROR       every search call failed
+"""
+
+from difflib import SequenceMatcher
+from typing import Any, Literal
+
+from pydantic import BaseModel
+
+from app.config import MAX_DISCOVERY_CALLS
+from app.tools import PlaceSearch, get_place_search
+from app.tools.base import LatLng
+from app.tools.mock_places import distance_km
+from app.tools.place import Place
+
+MIN_PER_INTEREST = 3
+SAME_NAME_SIMILARITY = 0.85
+SAME_PLACE_KM = 0.05  # 50 metres
+RESULTS_PER_SEARCH = 10
+RESULTS_FOR_ANYTHING = 30  # a search with no interest returns a bigger mix
+
+
+class DiscoveryResult(BaseModel):
+    status: Literal["PASS", "INFEASIBLE", "ERROR"]
+    places: list[Place]
+    coverage: dict[str, int]  # interest -> how many places we found for it
+    calls_used: int
+    reason: str
+
+
+def _same_place(a: Place, b: Place) -> bool:
+    """Same id, or nearly the same name within 50 m (one cafe listed twice)."""
+    if a.id == b.id:
+        return True
+    similarity = SequenceMatcher(None, a.name.lower(), b.name.lower()).ratio()
+    close = distance_km(LatLng(lat=a.lat, lng=a.lng), b.lat, b.lng) < SAME_PLACE_KM
+    return similarity >= SAME_NAME_SIMILARITY and close
+
+
+def _add(found: list[Place], place: Place) -> tuple[Place, bool]:
+    """Add a place unless we already have it. Returns (the kept place, was it new?)."""
+    for kept in found:
+        if _same_place(kept, place):
+            # Keep the first copy, but remember every provider that listed it.
+            for source in place.sources:
+                if source not in kept.sources:
+                    kept.sources.append(source)
+            kept.provider_ids.update(place.provider_ids)
+            return kept, False
+    found.append(place)
+    return place, True
+
+
+def _mix(per_interest: dict[str, list[str]], found: list[Place]) -> list[Place]:
+    """Order places by taking turns between interests, so the first few are varied.
+
+    The planner uses the first places in the list, so "museum, cafe, park, museum, ..."
+    gives a better day than "museum, museum, museum, ...".
+    """
+    by_id = {place.id: place for place in found}
+    queues = [list(ids) for ids in per_interest.values()]
+    ordered: list[str] = []
+    while any(queues):
+        for queue in queues:
+            if queue:
+                place_id = queue.pop(0)
+                if place_id not in ordered:
+                    ordered.append(place_id)
+    ordered += [place.id for place in found if place.id not in ordered]
+    return [by_id[place_id] for place_id in ordered]
+
+
+def discover_places(
+    trip: dict[str, Any],
+    search: PlaceSearch | None = None,
+    max_calls: int = MAX_DISCOVERY_CALLS,
+) -> DiscoveryResult:
+    """Find candidate places for the trip's interests within a fixed number of searches."""
+    search = search or get_place_search()
+    mode = trip.get("mode", "walking")
+    interests = [str(i).strip() for i in trip.get("interests", []) if str(i).strip()]
+    if not interests:
+        interests = [""]  # no interests given: one search for anything good nearby
+
+    found: list[Place] = []
+    per_interest: dict[str, list[str]] = {interest: [] for interest in interests}
+    calls = failures = 0
+    hit_cap = False
+
+    # Step 1 is a focused search for every interest; step 2 a wider one for those still short.
+    for step in ("focused", "wide"):
+        for interest in interests:
+            if len(per_interest[interest]) >= MIN_PER_INTEREST:
+                continue
+            if step == "wide" and not interest:
+                continue  # "anything" was already as wide as it gets
+            if calls >= max_calls:
+                hit_cap = True
+                break
+            calls += 1
+            try:
+                if step == "focused":
+                    results = search.search_places(
+                        query=interest,
+                        categories=[interest] if interest else None,
+                        mode=mode,
+                        limit=RESULTS_PER_SEARCH if interest else RESULTS_FOR_ANYTHING,
+                    )
+                else:
+                    results = search.search_places(
+                        query=interest, mode=mode, limit=RESULTS_PER_SEARCH * 2
+                    )
+            except Exception:  # one failed call should not end the whole search
+                failures += 1
+                continue
+            for result in results:
+                kept, _ = _add(found, result)
+                if kept.id not in per_interest[interest]:
+                    per_interest[interest].append(kept.id)
+
+    # Nothing matched any interest: one last search for anything, so the plan is not empty.
+    if not found and interests != [""] and calls < max_calls:
+        calls += 1
+        try:
+            for result in search.search_places(mode=mode, limit=RESULTS_FOR_ANYTHING):
+                _add(found, result)
+        except Exception:
+            failures += 1
+
+    coverage = {interest: len(ids) for interest, ids in per_interest.items()}
+    short = [interest or "anything" for interest, n in coverage.items() if n < MIN_PER_INTEREST]
+
+    if calls and failures == calls:
+        status, reason = "ERROR", f"All {calls} place searches failed."
+    elif not short:
+        status, reason = "PASS", f"Found at least {MIN_PER_INTEREST} places for every interest."
+    else:
+        why = f"hit the limit of {max_calls} searches" if hit_cap else "no more places were found"
+        status, reason = "INFEASIBLE", f"Stopped ({why}); too few places for: {', '.join(short)}."
+
+    return DiscoveryResult(
+        status=status,
+        places=_mix(per_interest, found),
+        coverage=coverage,
+        calls_used=calls,
+        reason=reason,
+    )

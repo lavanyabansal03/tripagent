@@ -9,9 +9,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from app.agents.discovery import discover_places
 from app.agents.planner import plan_and_validate
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
-from app.tools import get_place_search
 
 
 class TripState(TypedDict, total=False):
@@ -133,18 +133,14 @@ def _sample_places(trip: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def _search_places(trip: dict[str, Any]) -> list[dict[str, Any]]:
-    """Use the shared place-search adapter; Seattle fixtures remain demo-safe."""
-    interests = trip.get("interests", [])
-    query = " ".join(interests) if interests else ""
-    places = get_place_search().search_places(
-        query=query,
-        categories=interests or None,
-        mode=trip.get("mode", "walking"),
-        limit=30,
-    )
-    if not places and query:
-        places = get_place_search().search_places(mode=trip.get("mode", "walking"), limit=30)
-    return [place.model_dump(mode="json") for place in places]
+    """Find candidates with the Discovery agent (one search per interest, capped).
+
+    It uses the shared place-search adapter, so DEMO_MODE stays on the Seattle fixtures.
+    """
+    result = discover_places(trip)
+    if result.status == "ERROR":
+        raise RuntimeError(result.reason)  # find_places retries, then explains the failure
+    return [place.model_dump(mode="json") for place in result.places]
 
 
 def _find_places(
