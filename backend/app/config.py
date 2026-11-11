@@ -12,6 +12,9 @@ from pydantic_settings import BaseSettings
 MAX_CLARIFICATION_ATTEMPTS = 2
 MAX_FIND_ATTEMPTS = 3
 
+# Longest wait for one Gemini answer before giving up (each retry gets its own limit).
+GEMINI_TIMEOUT_SECONDS = 20
+
 # The .env file lives at the repo root (one level above backend/).
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 

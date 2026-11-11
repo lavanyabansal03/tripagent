@@ -72,12 +72,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   createTrip(input: TripFormInput): Promise<CreateTripResponse> {
     if (DEMO_MODE) return Promise.resolve(mock.createTrip(input))
-    // The backend rejects unknown fields (422) and does not use `touched` yet,
-    // so only the demo engine gets it. Send it once the API accepts it.
-    const { touched: _touched, ...body } = input
+    // `touched` tells the backend which values the traveller chose, so a number
+    // in the "Tell us more" note can replace a form default they never changed.
     return request<CreateTripResponse>('/trips', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(input),
     })
   },
 

@@ -2,10 +2,10 @@ import time
 from typing import Literal
 
 from google import genai
-from google.genai import errors
+from google.genai import errors, types
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.config import GEMINI_TIMEOUT_SECONDS, settings
 
 
 class Preferences(BaseModel):
@@ -21,7 +21,11 @@ def extract_preferences(trip_description: str) -> Preferences | None:
     if not settings.GOOGLE_API_KEY:
         return None
 
-    client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+    # Without a time limit a stuck request would hang trip creation forever.
+    client = genai.Client(
+        api_key=settings.GOOGLE_API_KEY,
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
+    )
 
     prompt = f"""
 You are a travel preference extraction assistant.
@@ -71,18 +75,17 @@ User trip description:
     return Preferences.model_validate_json(response.text)
 
 
+# Gemini answers 429 (too many requests) or 503 (busy) on the free tier.
 RETRY_CODES = {429, 503}
 MAX_TRIES = 4
 
 
 def call_with_retry(call, sleep=time.sleep):
-    """Retry Gemini requests on 429/503 errors."""
-
+    """Run call(); on 429/503 wait 2, 4, 8 seconds and try again (MAX_TRIES in total)."""
     for attempt in range(MAX_TRIES):
         try:
             return call()
         except errors.APIError as error:
             if error.code not in RETRY_CODES or attempt == MAX_TRIES - 1:
                 raise
-
             sleep(2 ** (attempt + 1))

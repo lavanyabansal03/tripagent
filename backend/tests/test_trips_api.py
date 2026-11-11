@@ -128,7 +128,7 @@ def test_create_trip_merges_extracted_preferences_without_overwriting_form_value
         lambda _text: Preferences(
             interests=["coffee", "art"],
             avoid=["nightclubs", "bars"],
-            max_travel_minutes=20,
+            max_travel_min=20,
         ),
     )
 
@@ -157,7 +157,7 @@ def test_create_trip_uses_extracted_preferences_when_form_values_are_omitted(mon
         trips_api,
         "extract_preferences",
         lambda _text: Preferences(
-            interests=["coffee"], avoid=["crowds"], max_travel_minutes=18
+            interests=["coffee"], avoid=["crowds"], max_travel_min=18
         ),
     )
 
@@ -192,3 +192,139 @@ def test_create_trip_continues_when_preference_extraction_fails(monkeypatch):
 
     assert response.status_code == 201
     assert response.json()["requirements"]["interests"] == ["parks"]
+
+
+# The Svelte form always sends every field, including defaults the traveller
+# never changed, and lists the fields they did change in `touched`.
+FORM_DEFAULTS = {
+    "destination": "Seattle",
+    "start_date": "2026-11-10",
+    "end_date": "2026-11-11",
+    "budget": 500,
+    "budget_strictness": "strict",
+    "mode": "transit",
+    "pace": "moderate",
+    "max_travel_min": 30,
+    "interests": [],
+    "avoid": [],
+    "tourist_local_ratio": 50,
+}
+
+
+def fake_extraction(monkeypatch, **fields):
+    monkeypatch.setattr(
+        trips_api, "extract_preferences", lambda _text: Preferences(**fields)
+    )
+
+
+def test_note_replaces_form_defaults_the_traveller_never_touched(monkeypatch):
+    fake_extraction(
+        monkeypatch, interests=["museums"], budget_max=300, max_travel_min=20
+    )
+
+    response = client.post(
+        "/api/trips",
+        json={
+            **FORM_DEFAULTS,
+            "free_text": "Museums, under $300, no more than 20 minutes between stops.",
+            "touched": ["destination"],
+        },
+    )
+
+    assert response.status_code == 201
+    requirements = response.json()["requirements"]
+    assert requirements["max_travel_min"] == 20
+    assert requirements["budget"] == 300
+    assert requirements["interests"] == ["museums"]
+    provenance = requirements["provenance"]
+    assert provenance["max_travel_min"] == "inferred"
+    assert provenance["budget"] == "inferred"
+    assert provenance["interests"] == "inferred"
+
+
+def test_note_never_overrides_a_value_the_traveller_set_in_the_form(monkeypatch):
+    fake_extraction(monkeypatch, budget_max=300, max_travel_min=20)
+
+    response = client.post(
+        "/api/trips",
+        json={
+            **FORM_DEFAULTS,
+            "budget": 450,
+            "max_travel_min": 45,
+            "free_text": "Under $300, max 20 minutes of travel.",
+            "touched": ["destination", "budget", "max_travel_min"],
+        },
+    )
+
+    requirements = response.json()["requirements"]
+    assert requirements["budget"] == 450
+    assert requirements["max_travel_min"] == 45
+    assert requirements["provenance"]["budget"] == "explicit"
+    assert requirements["provenance"]["max_travel_min"] == "explicit"
+
+
+def test_untouched_form_fields_are_labelled_default():
+    response = client.post(
+        "/api/trips",
+        json={**FORM_DEFAULTS, "mode": "walking", "touched": ["destination", "mode"]},
+    )
+
+    provenance = response.json()["requirements"]["provenance"]
+    assert provenance["mode"] == "explicit"
+    assert provenance["pace"] == "default"
+    assert provenance["budget"] == "default"
+    assert provenance["max_travel_min"] == "default"
+    assert provenance["tourist_local_ratio"] == "default"
+
+
+def test_trip_is_created_from_the_form_when_there_is_no_api_key():
+    # The shared test setup removes the key, so the real agent returns None.
+    response = client.post(
+        "/api/trips",
+        json={
+            **FORM_DEFAULTS,
+            "interests": ["parks"],
+            "free_text": "Museums, max 20 minutes.",
+            "touched": ["interests"],
+        },
+    )
+
+    assert response.status_code == 201
+    requirements = response.json()["requirements"]
+    assert requirements["interests"] == ["parks"]
+    assert requirements["max_travel_min"] == 30
+
+
+def test_same_interest_in_form_and_note_is_kept_once(monkeypatch):
+    fake_extraction(monkeypatch, interests=["coffee", "Museums"])
+
+    response = client.post(
+        "/api/trips",
+        json={
+            **FORM_DEFAULTS,
+            "interests": ["Coffee", "museums"],
+            "free_text": "Coffee and museums.",
+            "touched": ["interests"],
+        },
+    )
+
+    assert response.json()["requirements"]["interests"] == ["Coffee", "museums"]
+
+
+def test_note_cannot_set_a_travel_limit_below_one_minute(monkeypatch):
+    fake_extraction(monkeypatch, max_travel_min=0)
+
+    response = client.post(
+        "/api/trips",
+        json={**FORM_DEFAULTS, "free_text": "No travel.", "touched": []},
+    )
+
+    assert response.json()["requirements"]["max_travel_min"] == 30
+
+
+def test_unknown_touched_field_is_rejected():
+    response = client.post(
+        "/api/trips", json={**FORM_DEFAULTS, "touched": ["not_a_field"]}
+    )
+
+    assert response.status_code == 422
