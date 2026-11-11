@@ -4,6 +4,8 @@ pydantic>=2.13
 pydantic-settings>=2.15
 python-dotenv>=1.2
 sqlalchemy>=2.1
+# Postgres driver for the online database (Neon), used when DATABASE_URL is postgres.
+psycopg[binary]>=3.2
 httpx>=0.28
 # Time zone data; Windows has none built in (used by the planner's local times).
 tzdata>=2025.2

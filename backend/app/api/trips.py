@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app import storage
 from app.agents.preferences import Preferences
 from app.agents.preferences_reader import read_preferences
 from app.graph.trip_planner import build_trip_graph
@@ -162,29 +163,38 @@ class RunStatus(BaseModel):
     started_at: str
 
 
-# The Sprint 1 backend is intentionally in-memory, like the graph checkpointer.
-_trips: dict[str, Trip] = {}
-_requirements: dict[str, TripRequirements] = {}
-_questions: dict[str, list[Question]] = {}
-_clarification_rounds: dict[str, int] = {}
-_clarification_exhausted: set[str] = set()
-_runs: dict[str, RunStatus] = {}
-_traces: dict[str, list[ExecutionEvent]] = {}
-_itineraries: dict[str, dict[str, Any]] = {}
+# Trips, versions, runs and traces are saved in the database (app/storage.py, ADR-005).
+
+
+def _load(trip_id: str) -> dict[str, Any]:
+    record = storage.get_trip(trip_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    return record
 
 
 def _get_trip(trip_id: str) -> Trip:
-    trip = _trips.get(trip_id)
-    if trip is None:
-        raise HTTPException(status_code=404, detail="Trip not found")
-    return trip
+    return Trip.model_validate(_load(trip_id)["trip"])
 
 
 def _get_requirements(trip_id: str) -> TripRequirements:
-    requirements = _requirements.get(trip_id)
-    if requirements is None:
-        raise HTTPException(status_code=404, detail="Trip not found")
-    return requirements
+    return TripRequirements.model_validate(_load(trip_id)["requirements"])
+
+
+def _save(
+    trip: Trip,
+    requirements: TripRequirements,
+    questions: list[Question],
+    clarification_rounds: int,
+    clarification_exhausted: bool,
+) -> None:
+    storage.save_trip(
+        trip.model_dump(mode="json"),
+        requirements.model_dump(mode="json"),
+        [question.model_dump(mode="json") for question in questions],
+        clarification_rounds,
+        clarification_exhausted,
+    )
 
 
 def _questions_for(start_date: str | None, end_date: str | None) -> list[Question]:
@@ -305,19 +315,19 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
         provenance=provenance,
     )
     questions = _questions_for(request.start_date, request.end_date)
-    _trips[trip_id] = trip
-    _requirements[trip_id] = requirements
-    _questions[trip_id] = questions
-    _clarification_rounds[trip_id] = 1 if questions else 0
+    _save(trip, requirements, questions, 1 if questions else 0, False)
     return CreateTripResponse(trip=trip, requirements=requirements, questions=questions)
 
 
 @router.post("/{trip_id}/answers", response_model=TripRequirements)
 def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
-    trip = _get_trip(trip_id)
-    requirements = _get_requirements(trip_id)
-    questions = _questions.get(trip_id, [])
-    if trip_id in _clarification_exhausted:
+    record = _load(trip_id)
+    trip = Trip.model_validate(record["trip"])
+    requirements = TripRequirements.model_validate(record["requirements"])
+    questions = [Question.model_validate(question) for question in record["questions"]]
+    rounds = record["clarification_rounds"]
+    exhausted = record["clarification_exhausted"]
+    if exhausted:
         raise HTTPException(status_code=409, detail="Trip-date clarification limit reached")
     updates: dict[str, str] = {}
 
@@ -343,36 +353,36 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
     trip = trip.model_copy(update=updates)
     remaining = _questions_for(requirements.start_date, requirements.end_date)
     if remaining:
-        if _clarification_rounds.get(trip_id, 0) >= 2:
+        if rounds >= 2:
             remaining = []
-            _clarification_exhausted.add(trip_id)
+            exhausted = True
         else:
-            _clarification_rounds[trip_id] = _clarification_rounds.get(trip_id, 0) + 1
-    _requirements[trip_id] = requirements
-    _trips[trip_id] = trip
-    _questions[trip_id] = remaining
+            rounds += 1
+    _save(trip, requirements, remaining, rounds, exhausted)
     return requirements
 
 
 @router.post("/{trip_id}/plan", response_model=PlanResponse)
 def plan_trip(trip_id: str) -> PlanResponse:
-    trip = _get_trip(trip_id)
-    requirements = _get_requirements(trip_id)
-    if _questions.get(trip_id) or trip_id in _clarification_exhausted:
+    record = _load(trip_id)
+    trip = Trip.model_validate(record["trip"])
+    requirements = TripRequirements.model_validate(record["requirements"])
+    questions = [Question.model_validate(question) for question in record["questions"]]
+    rounds = record["clarification_rounds"]
+    if questions or record["clarification_exhausted"]:
         raise HTTPException(
             status_code=409,
             detail="Trip dates are required; the two-round clarification limit was reached",
         )
 
-    existing_run_id = next(
-        (run_id for run_id, run in _runs.items() if run.trip_id == trip_id), None
-    )
+    existing_run_id = storage.run_id_for_trip(trip_id)
     if existing_run_id:
         return PlanResponse(run_id=existing_run_id)
 
     run_id = str(uuid4())
     started_at = datetime.now(UTC).isoformat()
-    _trips[trip_id] = trip.model_copy(update={"status": "planning"})
+    trip = trip.model_copy(update={"status": "planning"})
+    _save(trip, requirements, questions, rounds, False)
     graph_trip = requirements.model_dump()
     graph_trip["trip_id"] = trip_id
     result = trip_graph.invoke(
@@ -387,7 +397,7 @@ def plan_trip(trip_id: str) -> PlanResponse:
         if succeeded
         else "failed"
     )
-    _runs[run_id] = RunStatus(
+    run = RunStatus(
         run_id=run_id,
         trip_id=trip_id,
         status=run_status,
@@ -400,16 +410,20 @@ def plan_trip(trip_id: str) -> PlanResponse:
         started_at=started_at,
     )
     if succeeded:
-        _trips[trip_id] = _trips[trip_id].model_copy(
+        itinerary = result.get("itinerary", {})
+        storage.save_itinerary(trip_id, itinerary)
+        trip = trip.model_copy(
             update={
                 "status": "infeasible" if run_status == "infeasible" else "planned",
-                "current_version": 1,
+                "current_version": itinerary.get("version", 1),
             }
         )
-        _itineraries[trip_id] = result.get("itinerary", {})
     else:
-        _trips[trip_id] = _trips[trip_id].model_copy(update={"status": "error"})
-    _traces[trip_id] = [ExecutionEvent.model_validate(event) for event in result.get("logs", [])]
+        trip = trip.model_copy(update={"status": "error"})
+    _save(trip, requirements, questions, rounds, False)
+    storage.save_run(run.model_dump(mode="json"))
+    events = [ExecutionEvent.model_validate(event) for event in result.get("logs", [])]
+    storage.save_trace(trip_id, run_id, [event.model_dump(mode="json") for event in events])
     return PlanResponse(run_id=run_id)
 
 
@@ -425,23 +439,20 @@ def get_trip_requirements(trip_id: str) -> TripRequirements:
 
 @router.get("/{trip_id}/itinerary")
 def get_itinerary(trip_id: str, version: int | None = None) -> dict[str, Any] | None:
-    _get_trip(trip_id)
-    itinerary = _itineraries.get(trip_id)
-    if itinerary is None or (version is not None and version != itinerary.get("version")):
-        return None
-    return itinerary
+    _load(trip_id)
+    return storage.get_itinerary(trip_id, version)
 
 
 @router.get("/{trip_id}/trace", response_model=list[ExecutionEvent])
 def get_trace(trip_id: str) -> list[ExecutionEvent]:
-    _get_trip(trip_id)
-    return _traces.get(trip_id, [])
+    _load(trip_id)
+    return [ExecutionEvent.model_validate(event) for event in storage.get_trace(trip_id)]
 
 
 @router.get("/{trip_id}/versions", response_model=list[int])
 def get_versions(trip_id: str) -> list[int]:
-    trip = _get_trip(trip_id)
-    return [trip.current_version] if trip.current_version else []
+    _load(trip_id)
+    return storage.list_versions(trip_id)
 
 
 @router.get("/{trip_id}/replans", response_model=list[dict[str, Any]])
@@ -452,7 +463,7 @@ def get_replans(trip_id: str) -> list[dict[str, Any]]:
 
 @runs_router.get("/{run_id}", response_model=RunStatus)
 def get_run(run_id: str) -> RunStatus:
-    run = _runs.get(run_id)
+    run = storage.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run
+    return RunStatus.model_validate(run)
