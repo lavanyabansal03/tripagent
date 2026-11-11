@@ -11,6 +11,7 @@ from langgraph.types import interrupt
 
 from app.agents.backup import attach_backups
 from app.agents.discovery import discover_places
+from app.agents.discovery_plan import plan_with_llm
 from app.agents.planner import build_plan_with_repairs
 from app.agents.repair_choice import choose_with_llm
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
@@ -142,10 +143,15 @@ def _search_places(trip: dict[str, Any]) -> list[dict[str, Any]]:
 
     It uses the shared place-search adapter, so DEMO_MODE stays on the Seattle fixtures.
     """
-    result = discover_places(trip)
+    return _discover(trip)[0]
+
+
+def _discover(trip: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Like _search_places, plus the LLM's search words for the Agent trace (A2)."""
+    result = discover_places(trip, plan=plan_with_llm)
     if result.status == "ERROR":
         raise RuntimeError(result.reason)  # find_places retries, then explains the failure
-    return [place.model_dump(mode="json") for place in result.places]
+    return [place.model_dump(mode="json") for place in result.places], result.search_words
 
 
 def _find_places(
@@ -153,12 +159,25 @@ def _find_places(
 ) -> dict[str, Any]:
     attempt = state.get("find_attempts", 0) + 1
     try:
-        places = search(state.get("trip", {}))
+        found = search(state.get("trip", {}))
+        # A search may also return the LLM's search words: (places, {interest: words}).
+        places, search_words = found if isinstance(found, tuple) else (found, {})
+        logs = state.get("logs", [])
+        if search_words:
+            logs = _log(
+                state,
+                "search_plan",
+                f"LLM chose search words for {len(search_words)} interest(s)",
+                event_type="llm",
+                search_words=search_words,
+            )
         return {
             "places": places,
             "find_attempts": attempt,
             "find_error": "",
-            "logs": _log(state, "find", f"Found {len(places)} places", attempt=attempt),
+            "logs": _log(
+                {**state, "logs": logs}, "find", f"Found {len(places)} places", attempt=attempt
+            ),
         }
     except Exception as error:  # Keep transient tool failures inside the bounded graph loop.
         return {
@@ -195,7 +214,7 @@ def _explain_failure(state: TripState) -> dict[str, Any]:
 
 def build_trip_graph(
     checkpointer: Any | None = None,
-    search: Callable[[dict[str, Any]], list[dict[str, Any]]] = _search_places,
+    search: Callable[[dict[str, Any]], Any] = _discover,
     save: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ):
     """Build a resumable graph. External search/save functions are injectable for tests."""
