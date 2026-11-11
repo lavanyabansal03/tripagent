@@ -29,10 +29,14 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
-      # true = use the recorded/mock providers (no keys needed). Set to false
-      # once the provider keys below are supplied and the live tools are wired.
+      # false = live: real places (Geoapify), travel times (Mapbox) and LLMs.
+      # A missing key never breaks the app: that part falls back to the demo data
+      # or to plain code. Set to "true" to run on recorded data only.
       - key: DEMO_MODE
-        value: "true"
+        value: "false"
+      # Which LLM goes first (ADR-009). NVIDIA while the Gemini free tier is overloaded.
+      - key: LLM_PRIMARY
+        value: nvidia
       # Postgres connection string (for example from Neon). Secret: paste it in the
       # Render dashboard. Empty -> a SQLite file, which Render wipes on every restart.
       - key: DATABASE_URL
@@ -60,11 +64,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      # true = the app runs on recorded data (full flow, works without the API).
-      # Set to false to call the live API; the header then shows the backend
-      # status and the "Demo mode" note/badge disappear.
+      # false = the website calls the live API (the header shows the backend status).
+      # true = the website runs on recorded data in the browser, without the API.
       - key: VITE_DEMO_MODE
-        value: "true"
+        value: "false"
       # The API's PUBLIC address. Not `fromService: property: host`: Render gives only the
       # private-network name there (no .onrender.com), which browsers cannot reach, so the
       # site showed "Backend offline". Change it here if the API service is renamed.

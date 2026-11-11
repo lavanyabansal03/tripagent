@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../copy/i18n'
   import type { RouteLeg } from '../types'
-  import { formatTime } from '../copy/i18n'
+  import { formatPlaceTime } from '../copy/i18n'
   import Icon from './Icon.svelte'
 
   interface Props {
@@ -26,7 +26,7 @@
     <span class="dot" aria-hidden="true">·</span>
     <span class="distance">{leg.distance_km} km</span>
     <span class="dot" aria-hidden="true">·</span>
-    <span class="depart">{formatTime(departAt)}</span>
+    <span class="depart">{formatPlaceTime(departAt)}</span>
     {#if over}
       <span class="flag" role="img" aria-label={t('validation.hardBadge')}>
         <Icon name="alert" size={12} />

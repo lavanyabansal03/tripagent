@@ -298,6 +298,19 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
         provenance["max_travel_min"] = "inferred"
     if budget != request.budget:
         provenance["budget"] = "inferred"
+    # One label per item: picked in the form (explicit), found in the note (inferred),
+    # or a form default the traveller never touched (default).
+    for field, items, from_form, from_note in (
+        ("interests", interests, request.interests, note.interests),
+        ("avoid", avoid, request.avoid, note.avoid),
+    ):
+        chosen = {i.strip().lower() for i in from_form} if request.user_chose(field) else set()
+        noted = {i.strip().lower() for i in from_note}
+        for item in items:
+            key = item.strip().lower()
+            provenance[f"{field}.{item}"] = (
+                "explicit" if key in chosen else "inferred" if key in noted else "default"
+            )
     requirements = TripRequirements(
         trip_id=trip_id,
         destination=request.destination,

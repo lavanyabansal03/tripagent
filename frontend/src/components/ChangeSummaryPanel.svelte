@@ -6,7 +6,7 @@
   import { t } from '../copy/i18n'
   import type { Activity, Itinerary, ReplanEvent } from '../types'
   import { CHANGE_VISUALS } from '../utils/visuals'
-  import { formatTime } from '../copy/i18n'
+  import { formatPlaceTime } from '../copy/i18n'
   import Icon from './Icon.svelte'
 
   interface Props {
@@ -99,7 +99,7 @@
             {#each group.items as a (a.id)}
               <li class="item">
                 <span class="place">{a.place.name}</span>
-                <span class="when">{formatTime(a.start)}</span>
+                <span class="when">{formatPlaceTime(a.start)}</span>
                 {#if reason(a)}
                   <span class="reason">{reason(a)}</span>
                 {/if}
@@ -120,7 +120,7 @@
       {#if keptOpen}
         <ul class="items kept-list">
           {#each byType.kept as a (a.id)}
-            <li class="item"><span class="place">{a.place.name}</span><span class="when">{formatTime(a.start)}</span></li>
+            <li class="item"><span class="place">{a.place.name}</span><span class="when">{formatPlaceTime(a.start)}</span></li>
           {/each}
         </ul>
       {/if}

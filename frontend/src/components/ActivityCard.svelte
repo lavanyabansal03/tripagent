@@ -7,7 +7,7 @@
   import { t } from '../copy/i18n'
   import type { Activity, ExperienceCategory, Place } from '../types'
   import { CHANGE_VISUALS, CATEGORY_VISUALS, LOCAL_SIGNAL_VISUALS } from '../utils/visuals'
-  import { formatCost, formatTime } from '../copy/i18n'
+  import { formatCost, formatPlaceTime } from '../copy/i18n'
   import BackupDrawer from './BackupDrawer.svelte'
   import FreshnessLabel from './FreshnessLabel.svelte'
   import Icon from './Icon.svelte'
@@ -58,9 +58,9 @@
 
   <div class="head">
     <span class="time">
-      <time datetime={activity.start}>{formatTime(activity.start)}</time>
+      <time datetime={activity.start}>{formatPlaceTime(activity.start)}</time>
       <span class="dash" aria-hidden="true">–</span>
-      <time datetime={activity.end}>{formatTime(activity.end)}</time>
+      <time datetime={activity.end}>{formatPlaceTime(activity.end)}</time>
     </span>
     <h3 id="activity-{activity.id}">{place.name}</h3>
     {#if locked}

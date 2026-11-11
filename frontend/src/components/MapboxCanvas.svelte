@@ -29,7 +29,9 @@
   )
 
   onMount(async () => {
-    const mod = await import('mapbox-gl')
+    // The map's own stylesheet: without it the zoom buttons and attribution are unstyled
+    // and the map does not fill its box.
+    const [mod] = await Promise.all([import('mapbox-gl'), import('mapbox-gl/dist/mapbox-gl.css')])
     const mapboxgl = mod.default
     mapboxgl.accessToken = mapToken
     if (!container) return
@@ -41,6 +43,12 @@
       attributionControl: true,
     })
     map = instance
+    // Keep the map the size of its box when the page layout changes.
+    if (typeof ResizeObserver !== 'undefined') {
+      const resizer = new ResizeObserver(() => instance.resize())
+      resizer.observe(container)
+      instance.on('remove', () => resizer.disconnect())
+    }
     instance.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     instance.on('load', () => {
       ready = true
