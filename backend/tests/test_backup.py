@@ -1,6 +1,6 @@
 """Tests for the Backup Agent."""
 
-from app.agents.backup import find_backups
+from app.agents.backup import attach_backups, find_backups
 
 
 def make_place(
@@ -101,7 +101,7 @@ def test_finds_valid_backup():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"]["id"] == "backup1"
+    assert results[0]["backups"][0]["place_id"] == "backup1"
 
 
 def test_rejects_original_place():
@@ -114,7 +114,7 @@ def test_rejects_original_place():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
 
 
 def test_rejects_wrong_purpose():
@@ -125,7 +125,7 @@ def test_rejects_wrong_purpose():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
 
 
 def test_rejects_closed_place():
@@ -147,7 +147,7 @@ def test_rejects_closed_place():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
 
 
 def test_rejects_expensive_backup():
@@ -160,7 +160,7 @@ def test_rejects_expensive_backup():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
 
 
 def test_rejects_avoid_conflict():
@@ -174,7 +174,7 @@ def test_rejects_avoid_conflict():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
 
 
 def test_no_candidates():
@@ -183,7 +183,7 @@ def test_no_candidates():
         FakePlaceSearch([]),
     )
 
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
     assert "No verified backup" in results[0]["reason"]
 
 
@@ -199,7 +199,8 @@ def test_low_priority_not_selected():
     assert results == []
 
 
-def test_medium_priority_not_selected_automatically():
+def test_medium_priority_gets_backups():
+    """FR-41: high and medium priority activities both get backups."""
     plan = make_plan(priority="medium")
     candidate = make_place("backup1", "Coffee Shop", ["cafe"])
 
@@ -208,11 +209,11 @@ def test_medium_priority_not_selected_automatically():
         FakePlaceSearch([candidate]),
     )
 
-    assert results == []
+    assert results[0]["backups"][0]["place_id"] == "backup1"
 
 
-def test_medium_priority_with_must_do_place_id():
-    plan = make_plan(priority="medium")
+def test_low_priority_with_must_do_place_id():
+    plan = make_plan(priority="low")
 
     plan["requirements"]["must_do"] = [
         {
@@ -234,11 +235,11 @@ def test_medium_priority_with_must_do_place_id():
     )
 
     assert len(results) == 1
-    assert results[0]["backup"]["id"] == "backup1"
+    assert results[0]["backups"][0]["place_id"] == "backup1"
 
 
-def test_medium_priority_with_must_do_name():
-    plan = make_plan(priority="medium")
+def test_low_priority_with_must_do_name():
+    plan = make_plan(priority="low")
 
     plan["requirements"]["must_do"] = [
         {
@@ -259,11 +260,11 @@ def test_medium_priority_with_must_do_name():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"]["id"] == "backup1"
+    assert results[0]["backups"][0]["place_id"] == "backup1"
 
 
 def test_unrelated_must_do_not_selected():
-    plan = make_plan(priority="medium")
+    plan = make_plan(priority="low")
 
     plan["requirements"]["must_do"] = [
         {
@@ -282,7 +283,7 @@ def test_unrelated_must_do_not_selected():
     assert results == []
 
 
-def test_rejects_missing_hours():
+def test_missing_hours_kept_but_marked_unknown():
     candidate = make_place("backup1", "Coffee Shop", ["cafe"])
     candidate["hours"] = None
 
@@ -291,7 +292,10 @@ def test_rejects_missing_hours():
         FakePlaceSearch([candidate]),
     )
 
-    assert results[0]["backup"] is None
+    backup = results[0]["backups"][0]
+    assert backup["place_id"] == "backup1"
+    assert backup["unknown"] == ["hours"]
+    assert backup["place"]["hours"] is None  # never invented
 
 
 def test_selects_closest_backup():
@@ -307,7 +311,7 @@ def test_selects_closest_backup():
         FakePlaceSearch([far, near]),
     )
 
-    assert results[0]["backup"]["id"] == "near"
+    assert results[0]["backups"][0]["place_id"] == "near"
 
 
 def test_cancelled_activity_ignored():
@@ -322,3 +326,144 @@ def test_cancelled_activity_ignored():
     )
 
     assert results == []
+
+
+# --- Fixes: two ranked backups, contract shape, unknown data, limits -------
+
+CONTRACT_FIELDS = {
+    "activity_id",
+    "place_id",
+    "rank",
+    "purpose_similarity",
+    "cost_delta",
+    "travel_delta_min",
+    "validated_at",
+}
+
+
+def test_backup_has_the_contract_fields():
+    candidate = make_place("backup1", "Alternative Coffee Shop", ["cafe"], 10)
+
+    backup = find_backups(make_plan(), FakePlaceSearch([candidate]))[0]["backups"][0]
+
+    assert CONTRACT_FIELDS <= backup.keys()
+    assert backup["activity_id"] == "A001"
+    assert backup["rank"] == 1
+    assert backup["purpose_similarity"] == 1.0
+    assert backup["cost_delta"] == -5  # 10 instead of 15
+    assert backup["unknown"] == []
+    assert backup["place"]["name"] == "Alternative Coffee Shop"
+
+
+def test_keeps_two_backups_ranked():
+    places = [
+        make_place("far", "Far Cafe", ["cafe"], lat=47.6240),
+        make_place("near", "Near Cafe", ["cafe"], lat=47.6206),
+        make_place("mid", "Mid Cafe", ["cafe"], lat=47.6215),
+    ]
+
+    backups = find_backups(make_plan(), FakePlaceSearch(places))[0]["backups"]
+
+    assert [b["place_id"] for b in backups] == ["near", "mid"]
+    assert [b["rank"] for b in backups] == [1, 2]
+
+
+def test_fully_checked_backup_ranks_before_one_with_unknown_hours():
+    unknown_hours = make_place("unknown", "Closer Cafe", ["cafe"], lat=47.6206)
+    unknown_hours["hours"] = None
+    checked = make_place("checked", "Farther Cafe", ["cafe"], lat=47.6215)
+
+    backups = find_backups(
+        make_plan(), FakePlaceSearch([unknown_hours, checked])
+    )[0]["backups"]
+
+    assert [b["place_id"] for b in backups] == ["checked", "unknown"]
+
+
+def test_unknown_price_is_kept_but_marked():
+    candidate = make_place("backup1", "Coffee Shop", ["cafe"])
+    candidate["est_cost_low"] = candidate["est_cost_high"] = None
+
+    backup = find_backups(make_plan(), FakePlaceSearch([candidate]))[0]["backups"][0]
+
+    assert backup["unknown"] == ["price"]
+    assert backup["cost_delta"] is None
+
+
+def test_place_already_in_the_plan_is_not_a_backup():
+    plan = make_plan()
+    other = make_place("taken", "Taken Cafe", ["cafe"])
+    plan["days"][0]["activities"].append(
+        {
+            "id": "A002",
+            "day": 1,
+            "place_id": "taken",
+            "start": "2026-11-10T12:00:00-08:00",
+            "end": "2026-11-10T13:00:00-08:00",
+            "priority": "low",
+            "status": "planned",
+            "est_cost": 10,
+            "place": other,
+            "purpose_tags": ["cafe"],
+        }
+    )
+
+    results = find_backups(plan, FakePlaceSearch([other]))
+
+    assert results[0]["backups"] == []
+
+
+def test_done_activity_gets_no_backups():
+    plan = make_plan()
+    plan["days"][0]["activities"][0]["status"] = "done"
+
+    assert find_backups(plan, FakePlaceSearch([make_place("b", "Cafe", ["cafe"])])) == []
+
+
+def test_search_limit_is_respected():
+    plan = make_plan()
+    second = dict(plan["days"][0]["activities"][0], id="A002")
+    second["start"] = "2026-11-10T13:00:00-08:00"
+    second["end"] = "2026-11-10T14:00:00-08:00"
+    plan["days"][0]["activities"].append(second)
+
+    class CountingSearch(FakePlaceSearch):
+        calls = 0
+
+        def search_places(self, **kwargs):
+            CountingSearch.calls += 1
+            return super().search_places(**kwargs)
+
+    results = find_backups(
+        plan, CountingSearch([make_place("b", "Cafe", ["cafe"])]), max_searches=1
+    )
+
+    assert CountingSearch.calls == 1
+    assert results[1]["backups"] == []
+    assert "limit" in results[1]["reason"]
+
+
+def test_provider_error_does_not_stop_the_plan():
+    class BrokenSearch:
+        def search_places(self, **_kwargs):
+            raise ConnectionError("provider down")
+
+    results = find_backups(make_plan(), BrokenSearch())
+
+    assert results[0]["backups"] == []
+    assert "could not be completed" in results[0]["reason"]
+
+
+def test_attach_backups_stores_them_on_each_activity():
+    plan = make_plan()
+    itinerary = {key: plan[key] for key in ("trip_id", "version", "days")}
+
+    total = attach_backups(
+        itinerary,
+        plan["requirements"],
+        search=FakePlaceSearch([make_place("b1", "Cafe One", ["cafe"])]),
+    )
+
+    activity = itinerary["days"][0]["activities"][0]
+    assert total == 1
+    assert activity["backups"][0]["place_id"] == "b1"

@@ -1,14 +1,27 @@
-"""Backup Agent (A4): find alternatives for important activities."""
+"""Backup Agent (A4): find alternatives for important activities.
 
-from datetime import datetime
+For every high or medium priority activity (FR-41), find up to two nearby
+places with the same purpose that pass the checks we can run. A check that
+cannot run because the data is missing (hours or price not listed) does not
+reject the place: the backup is kept, ranked after fully checked ones, and the
+missing pieces are listed in its `unknown` field. We never invent hours or
+prices. Backups are checked again before use (FR-44).
+"""
+
+from datetime import UTC, datetime
 from typing import Any
 
+from app.config import BACKUPS_PER_ACTIVITY, MAX_BACKUP_SEARCHES
+from app.tools import get_place_search
 from app.tools.base import LatLng
-from app.tools.mock_places import MockPlaceSearch, distance_km, rough_minutes
+from app.tools.mock_places import distance_km, rough_minutes
 from app.validation.avoid import check_avoid_list
 from app.validation.budget import check_budget
 from app.validation.opening_hours import check_opening_hours
 from app.validation.travel_time import check_travel_time
+
+IMPORTANT_PRIORITIES = {"high", "medium"}
+SKIPPED_STATUSES = {"cancelled", "done"}
 
 
 def _as_dict(value: Any) -> dict:
@@ -47,9 +60,9 @@ def _normalize(value: str) -> str:
 
 
 def _is_important(activity: dict, preferences: dict) -> bool:
-    """Recognize high priority and the user's must-do places."""
+    """High and medium priority activities and the user's must-do places (FR-41)."""
 
-    if activity.get("priority") == "high":
+    if activity.get("priority") in IMPORTANT_PRIORITIES:
         return True
 
     if activity.get("must_do") is True:
@@ -99,6 +112,36 @@ def _candidate_cost(place: dict) -> float | None:
     return cost
 
 
+def _travel_limit(preferences: dict, radius_min: int) -> int:
+    max_travel = preferences.get("max_travel_min")
+    return radius_min if max_travel is None else min(radius_min, max_travel)
+
+
+def _minutes_between(a: dict, b: dict, mode: str) -> float:
+    distance = distance_km(LatLng(lat=a["lat"], lng=a["lng"]), b["lat"], b["lng"])
+    return rough_minutes(distance, mode)
+
+
+def _neighbours(activity: dict, activities: list[dict], replacement: dict) -> list[dict]:
+    """The stop before, the replacement, and the stop after, on the same day."""
+    same_day = sorted(
+        (
+            item
+            for item in activities
+            if item.get("day") == activity.get("day")
+            and item.get("status") != "cancelled"
+        ),
+        key=lambda item: datetime.fromisoformat(item["start"]),
+    )
+    ids = [item.get("id") for item in same_day]
+    if activity.get("id") not in ids:
+        return [replacement]
+    position = ids.index(activity.get("id"))
+    before = same_day[position - 1 : position] if position > 0 else []
+    after = same_day[position + 1 : position + 2]
+    return [*before, replacement, *after]
+
+
 def _check_candidate(
     activity: dict,
     candidate: dict,
@@ -107,49 +150,42 @@ def _check_candidate(
     trip_id: str,
     version: int,
     radius_min: int,
-) -> bool:
+) -> list[str] | None:
+    """Return None if the candidate fails a check, else the list of unknowns.
+
+    An empty list means every check ran and passed; ["hours"] means the hours
+    are not listed, so that check could not run.
+    """
     original = activity.get("place") or {}
+    planned_ids = {
+        (item.get("place") or {}).get("id") or item.get("place_id")
+        for item in activities
+        if item.get("status") != "cancelled"
+    }
 
-    if candidate.get("id") == original.get("id"):
-        return False
-
-    if not candidate.get("id"):
-        return False
+    if not candidate.get("id") or candidate.get("id") in planned_ids:
+        return None  # the same place, or one already in the plan
 
     if any(
         place.get(key) is None
         for place in (original, candidate)
         for key in ("lat", "lng")
     ):
-        return False
+        return None
 
     purpose = set(_purpose_tags(activity))
-
     candidate_types = {
         str(tag).strip().lower()
         for tag in (candidate.get("experience_types") or [])
     }
-
-    if not purpose or not purpose.intersection(candidate_types):
-        return False
+    if not purpose or not purpose & candidate_types:
+        return None
 
     mode = preferences.get("mode", "walking")
-    max_travel = preferences.get("max_travel_min")
+    if _minutes_between(original, candidate, mode) > _travel_limit(preferences, radius_min):
+        return None
 
-    effective_limit = radius_min
-
-    if max_travel is not None:
-        effective_limit = min(radius_min, max_travel)
-
-    distance = distance_km(
-        LatLng(lat=original["lat"], lng=original["lng"]),
-        candidate["lat"],
-        candidate["lng"],
-    )
-
-    if rough_minutes(distance, mode) > effective_limit:
-        return False
-
+    unknown: list[str] = []
     replacement = {
         **activity,
         "place_id": candidate["id"],
@@ -157,122 +193,116 @@ def _check_candidate(
         "est_cost": _candidate_cost(candidate),
     }
 
+    # Opening hours: closed rejects; not listed is unknown (contracts.md 5.2).
     hours = candidate.get("hours")
-
-    if not isinstance(hours, list):
+    if hours is None:
         hours = candidate.get("opening_hours")
-
-    if not isinstance(hours, list):
-        return False
-
-    opening_result = check_opening_hours(
+    opening = check_opening_hours(
         activity["start"],
         activity["end"],
-        hours,
+        hours if isinstance(hours, list) else None,
         trip_id=trip_id,
         version=version,
         activity_id=activity.get("id"),
     )
+    if not opening.passed:
+        if opening.severity != "data-gap":
+            return None
+        unknown.append("hours")
 
-    if not opening_result.passed:
-        return False
-
-    avoid_result = check_avoid_list(
+    avoid = check_avoid_list(
         [replacement],
         preferences.get("avoid", []),
         trip_id=trip_id,
         version=version,
     )
+    if not avoid.passed and avoid.severity == "hard":
+        return None
 
-    if not avoid_result.passed:
-        return False
-
+    # Budget: a known price over the limit rejects; no price is unknown.
     budget_max = preferences.get("budget_max")
-
     if budget_max is None:
         budget_max = preferences.get("budget")
-
     if budget_max is not None:
         if replacement["est_cost"] is None:
-            return False
+            unknown.append("price")
+        else:
+            updated = [
+                replacement if item.get("id") == activity.get("id") else item
+                for item in activities
+            ]
+            budget = check_budget(
+                updated,
+                budget_max,
+                preferences.get("budget_strictness", "strict"),
+                trip_id=trip_id,
+                version=version,
+            )
+            if not budget.passed and budget.severity == "hard":
+                return None
 
-        updated = [
-            replacement
-            if item.get("id") == activity.get("id")
-            else item
-            for item in activities
-        ]
-
-        budget_result = check_budget(
-            updated,
-            budget_max,
-            preferences.get("budget_strictness", "strict"),
-            trip_id=trip_id,
-            version=version,
-        )
-
-        if not budget_result.passed:
-            return False
-
-    same_day = sorted(
-        [
-            item
-            for item in activities
-            if item.get("day") == activity.get("day")
-            and item.get("status") != "cancelled"
-        ],
-        key=lambda item: datetime.fromisoformat(item["start"]),
-    )
-
-    position = next(
-        (
-            index
-            for index, item in enumerate(same_day)
-            if item.get("id") == activity.get("id")
-        ),
-        None,
-    )
-
-    if position is None:
-        return False
-
-    travel_activities = []
-
-    if position > 0:
-        travel_activities.append(same_day[position - 1])
-
-    travel_activities.append(replacement)
-
-    if position + 1 < len(same_day):
-        travel_activities.append(same_day[position + 1])
-
-    if len(travel_activities) > 1:
-        travel_result = check_travel_time(
-            travel_activities,
+    path = _neighbours(activity, activities, replacement)
+    if len(path) > 1:
+        travel = check_travel_time(
+            path,
             mode=mode,
-            max_travel_min=max_travel,
+            max_travel_min=preferences.get("max_travel_min"),
             trip_id=trip_id,
             version=version,
         )
+        if not travel.passed and travel.severity != "data-gap":
+            return None
 
-        if not travel_result.passed:
-            return False
+    return unknown
 
-    return True
+
+def _make_backup(
+    activity: dict,
+    candidate: dict,
+    unknown: list[str],
+    purpose: list[str],
+    mode: str,
+    validated_at: str,
+) -> dict:
+    """One backup in the docs/contracts.md 6.1 shape, plus `place` and `unknown`."""
+    candidate_types = {str(t).strip().lower() for t in candidate.get("experience_types") or []}
+    shared = set(purpose) & candidate_types
+    cost = _candidate_cost(candidate)
+    planned_cost = activity.get("est_cost")
+    return {
+        "activity_id": activity.get("id"),
+        "place_id": candidate["id"],
+        "rank": 0,  # set after sorting
+        "purpose_similarity": round(len(shared) / len(set(purpose)), 2),
+        "cost_delta": (
+            None if cost is None or planned_cost is None else round(cost - planned_cost, 2)
+        ),
+        "travel_delta_min": round(_minutes_between(activity["place"], candidate, mode)),
+        "validated_at": validated_at,
+        "place": candidate,
+        "unknown": unknown,
+    }
 
 
 def find_backups(
     plan: dict,
     search=None,
     radius_min: int = 20,
+    per_activity: int = BACKUPS_PER_ACTIVITY,
+    max_searches: int = MAX_BACKUP_SEARCHES,
 ) -> list[dict]:
-    """Find one suitable backup per important activity."""
+    """Find up to `per_activity` backups for each important activity.
+
+    Returns one result per important activity:
+    {"activity_id", "purpose_tags", "backups": [Backup, ...], "reason"}.
+    At most `max_searches` place searches are made for the whole plan.
+    """
 
     if radius_min <= 0:
         raise ValueError("radius_min must be positive")
 
     if search is None:
-        search = MockPlaceSearch()
+        search = get_place_search()
 
     preferences = _get_preferences(plan)
     activities = _get_activities(plan)
@@ -280,11 +310,13 @@ def find_backups(
     trip_id = str(plan.get("trip_id", "unknown"))
     version = plan.get("version", 0)
     mode = preferences.get("mode", "walking")
+    validated_at = datetime.now(UTC).isoformat()
+    searches = 0
 
     results = []
 
     for activity in activities:
-        if activity.get("status") == "cancelled":
+        if activity.get("status") in SKIPPED_STATUSES:
             continue
 
         if not _is_important(activity, preferences):
@@ -296,86 +328,76 @@ def find_backups(
         result = {
             "activity_id": activity.get("id"),
             "purpose_tags": purpose,
-            "backup": None,
+            "backups": [],
             "reason": "No verified backup available.",
         }
+        results.append(result)
 
         if not purpose:
             result["reason"] = "Activity purpose is unknown."
-            results.append(result)
             continue
 
         if original.get("lat") is None or original.get("lng") is None:
             result["reason"] = "Original place coordinates are missing."
-            results.append(result)
             continue
 
+        if searches >= max_searches:
+            result["reason"] = "Search limit for backups reached."
+            continue
+
+        searches += 1
         try:
             candidates = search.search_places(
                 query="",
-                near=LatLng(
-                    lat=original["lat"],
-                    lng=original["lng"],
-                ),
+                near=LatLng(lat=original["lat"], lng=original["lng"]),
                 categories=purpose,
                 radius_min=radius_min,
                 mode=mode,
                 limit=20,
             )
-        except (ValueError, TypeError, RuntimeError):
+        except Exception:  # a provider error must not stop the plan
             result["reason"] = "Place search could not be completed."
-            results.append(result)
             continue
 
-        valid_candidates = []
-
+        found = []
         for candidate in candidates:
             place = _as_dict(candidate)
-
-            if not _check_candidate(
-                activity,
-                place,
-                activities,
-                preferences,
-                trip_id,
-                version,
-                radius_min,
-            ):
-                continue
-
-            distance = distance_km(
-                LatLng(
-                    lat=original["lat"],
-                    lng=original["lng"],
-                ),
-                place["lat"],
-                place["lng"],
+            unknown = _check_candidate(
+                activity, place, activities, preferences, trip_id, version, radius_min
             )
+            if unknown is not None:
+                found.append(_make_backup(activity, place, unknown, purpose, mode, validated_at))
 
-            matching_types = {
-                str(tag).strip().lower()
-                for tag in (place.get("experience_types") or [])
-            }
-
-            valid_candidates.append(
-                (
-                    -len(set(purpose).intersection(matching_types)),
-                    rough_minutes(distance, mode),
-                    _candidate_cost(place) or 0,
-                    place,
-                )
+        # Fully checked first, then closest purpose, shortest detour, lowest cost.
+        found.sort(
+            key=lambda b: (
+                len(b["unknown"]),
+                -b["purpose_similarity"],
+                b["travel_delta_min"],
+                b["cost_delta"] if b["cost_delta"] is not None else 0,
             )
+        )
+        result["backups"] = found[:per_activity]
+        for rank, backup in enumerate(result["backups"], start=1):
+            backup["rank"] = rank
 
-        if valid_candidates:
-            valid_candidates.sort(key=lambda item: item[:3])
-            selected = valid_candidates[0][3]
-
-            result["backup"] = selected
+        if result["backups"]:
             result["reason"] = (
-                "Alternative passed the available opening-hours, "
-                "budget, avoid-list, and estimated travel checks."
+                "Passed the opening-hours, budget, avoid-list and travel checks "
+                "that the available data allows."
             )
-
-        results.append(result)
 
     return results
+
+
+def attach_backups(itinerary: dict, trip: dict, search=None) -> int:
+    """Store each activity's backups on the activity itself. Returns how many were found."""
+    results = find_backups({**itinerary, "requirements": trip}, search=search)
+    by_activity = {result["activity_id"]: result["backups"] for result in results}
+    total = 0
+    for day in itinerary.get("days", []):
+        for activity in day.get("activities", []):
+            if activity.get("id") in by_activity:
+                activity["backups"] = by_activity[activity["id"]]
+                total += len(activity["backups"])
+    return total

@@ -327,9 +327,13 @@ The Activity model represents scheduled events in an itinerary.
 | `place_id` | string |
 | `rank` | number |
 | `purpose_similarity` | number |
-| `cost_delta` | number |
+| `cost_delta` | number or null (`null` when either price is unknown) |
 | `travel_delta_min` | number |
 | `validated_at` | ISO 8601 datetime string |
+| `place` | `Place` (optional) | The backup place, so the UI can show its name and cost |
+| `unknown` | `("hours" \| "price")[]` (optional) | Checks that could not run because the data is not listed. Empty when every check passed. |
+
+Backups are found for high **and** medium priority activities (FR-41), up to 2 per activity, ranked: fully checked backups first, then the closest purpose match, the shortest detour and the lowest cost. A place known to be closed or over budget is never a backup; a place whose hours or price are not listed is kept, marked in `unknown`, and must be revalidated before use (FR-44).
 
 ### 6.2 Activity Cost Convention (Proposed Implementation Decision)
 

@@ -144,9 +144,14 @@ export interface Backup {
   place_id: string
   rank: number
   purpose_similarity: number
-  cost_delta: number
+  /** null when either price is unknown. */
+  cost_delta: number | null
   travel_delta_min: number
   validated_at: string
+  /** The backup place (live API); demo backups are looked up in the fixtures. */
+  place?: Place
+  /** Checks that could not run because the data is not listed (contracts.md 6.1). */
+  unknown?: ('hours' | 'price')[]
 }
 
 export interface Activity {

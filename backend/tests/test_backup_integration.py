@@ -92,7 +92,7 @@ def test_real_seed_data_has_unknown_hours():
 
 
 def test_backup_does_not_invent_opening_hours():
-    """The Backup Agent must reject unverifiable candidates."""
+    """Unknown hours and prices are kept as unknown, never filled in."""
 
     plan = make_plan()
 
@@ -104,8 +104,13 @@ def test_backup_does_not_invent_opening_hours():
     assert len(results) == 1
 
     assert results[0]["activity_id"] == "A001"
-    assert results[0]["backup"] is None
-    assert results[0]["reason"]
+    backups = results[0]["backups"]
+    assert backups, "seed cafes nearby should be offered as backups"
+    for backup in backups:
+        # Seed data has no hours or prices: they stay unknown, never invented.
+        assert backup["unknown"] == ["hours", "price"]
+        assert backup["place"]["hours"] is None
+        assert backup["cost_delta"] is None
 
 
 def test_backup_does_not_invent_prices():
@@ -185,9 +190,7 @@ def test_backup_with_complete_candidate_information():
 
     assert len(results) == 1
 
-    backup = results[0]["backup"]
-
-    assert backup is not None
+    backup = results[0]["backups"][0]["place"]
 
     assert backup["id"] != (
         plan["days"][0]["activities"][0]["place"]["id"]
@@ -213,4 +216,4 @@ def test_replacement_respects_avoid_preferences():
     )
 
     assert len(results) == 1
-    assert results[0]["backup"] is None
+    assert results[0]["backups"] == []
