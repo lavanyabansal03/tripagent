@@ -36,7 +36,7 @@ def check_opening_hours(
         )
 
     # No hours (None or an empty list) means we don't know, not "closed".
-    if not hours:
+    if not hours or not isinstance(hours, list):
         return make_result(
             False,
             "data-gap",

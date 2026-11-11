@@ -2,8 +2,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from app.config import MAX_FIND_ATTEMPTS
+from app.graph import trip_planner
 from app.graph.retry_example import run_retry_example
 from app.graph.trip_planner import build_trip_graph
+from app.tools.mock_places import MockPlaceSearch
 
 
 def test_learning_loop_succeeds_before_three_tries():
@@ -39,15 +41,10 @@ def test_trip_graph_asks_for_dates_then_runs_in_order():
     )
 
     assert result["status"] == "completed"
-    assert [entry["node"] for entry in result["logs"]] == [
-        "read",
-        "ask_question",
-        "answer",
-        "find",
-        "planner",
-        "validator",
-        "save",
-    ]
+    nodes = [entry["node"] for entry in result["logs"]]
+    assert nodes[:5] == ["read", "ask_question", "answer", "find", "planner"]
+    assert "validator" in nodes
+    assert nodes[-1] == "save"
     assert len(result["places"]) == 21
     assert len(result["itinerary"]["days"]) == 5
     assert result["itinerary"]["days"][0]["activities"]
@@ -131,6 +128,32 @@ def test_trip_graph_clarifies_reversed_dates_before_search():
     )
     assert result["status"] == "completed"
     assert "find" in [entry["node"] for entry in result["logs"]]
+
+
+def test_searches_each_interest_and_merges_results(monkeypatch):
+    mock_search = MockPlaceSearch()
+    queries = []
+
+    class RecordingSearch:
+        def search_places(self, **kwargs):
+            queries.append(kwargs["query"])
+            return mock_search.search_places(**kwargs)
+
+    monkeypatch.setattr(trip_planner, "get_place_search", lambda: RecordingSearch())
+    places = trip_planner._search_places({"interests": ["coffee", "museums"]})
+
+    assert queries == ["coffee", "museums"]
+    names = {place["name"] for place in places}
+    assert "Storyville Coffee Pike Place" in names
+    assert "Museum of Pop Culture" in names
+    assert "Discovery Park" not in names
+
+
+def test_interest_search_with_no_results_does_not_fall_back_to_random_places(monkeypatch):
+    mock_search = MockPlaceSearch()
+    monkeypatch.setattr(trip_planner, "get_place_search", lambda: mock_search)
+
+    assert trip_planner._search_places({"interests": ["unmatched interest"]}) == []
 
 
 def test_save_failure_is_bounded_and_explained():

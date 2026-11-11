@@ -10,7 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from app.agents.discovery import discover_places
-from app.agents.planner import plan_and_validate
+from app.agents.planner import build_plan_with_repairs
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
 
 
@@ -30,6 +30,9 @@ class TripState(TypedDict, total=False):
     run_id: str
     itinerary: dict[str, Any]
     validation: list[dict[str, Any]]
+    terminal: str
+    explanation: str
+    repair_iterations: int
 
 
 def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict[str, Any]]:
@@ -198,19 +201,31 @@ def build_trip_graph(
         return _find_places(state, search)
 
     def plan_node(state: TripState) -> dict[str, Any]:
-        itinerary, validation = plan_and_validate(
+        itinerary, validation, repair_iterations, terminal, explanation = build_plan_with_repairs(
             state.get("trip", {}), state.get("places", [])
         )
-        planner_logs = _log(state, "planner", "Built a day-by-day itinerary")
+        logs = _log(state, "planner", "Built a day-by-day itinerary")
+        for iteration in range(1, repair_iterations + 1):
+            logs = _log(
+                {**state, "logs": logs},
+                "repair",
+                "Replaced or rearranged activities and reran validation",
+                iteration=iteration,
+                event_type="loop",
+            )
         validation_logs = _log(
-            {**state, "logs": planner_logs},
+            {**state, "logs": logs},
             "validator",
             f"Ran {len(validation)} itinerary checks",
             event_type="validation",
+            terminal=terminal,
         )
         return {
             "itinerary": itinerary,
             "validation": validation,
+            "repair_iterations": repair_iterations,
+            "terminal": terminal,
+            "explanation": explanation or "",
             "logs": validation_logs,
         }
 
@@ -228,7 +243,9 @@ def build_trip_graph(
                 "saved_trip": saved_trip,
                 "save_attempts": attempt,
                 "save_error": "",
-                "status": "completed",
+                "status": (
+                    "infeasible" if state.get("terminal") == "INFEASIBLE" else "completed"
+                ),
                 "logs": _log(state, "save", "Trip plan saved", attempt=attempt),
             }
         except Exception as error:  # Keep storage failures inside the bounded graph loop.
