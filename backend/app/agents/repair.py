@@ -14,9 +14,11 @@ travel time between stops, and over budget. Soft problems are not repaired;
 they are shown to the user (docs/03 section 5.3).
 """
 
+from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from typing import Any
 
+from app.config import REPAIR_OPTIONS_FOR_LLM
 from app.tools.base import LatLng
 from app.tools.mock_places import distance_km
 from app.validation.avoid import check_avoid_list
@@ -26,6 +28,10 @@ from app.validation.overlap import check_overlap
 from app.validation.travel_time import check_travel_time
 
 PROTECTED_STATUSES = {"done", "locked", "cancelled"}
+
+# choose(trip, activity, options, problem) -> (index into options, one-line why) or None.
+# The LLM-backed version is app/agents/repair_choice.py; None means "use the first".
+Chooser = Callable[[dict[str, Any], dict[str, Any], list[dict[str, Any]], str], Any]
 GAP_AFTER_MOVE = timedelta(minutes=15)
 
 
@@ -41,10 +47,17 @@ def violation_score(checks: list[dict[str, Any]]) -> int:
 
 
 def repair_itinerary(
-    trip: dict[str, Any], itinerary: dict[str, Any], places: list[dict[str, Any]]
+    trip: dict[str, Any],
+    itinerary: dict[str, Any],
+    places: list[dict[str, Any]],
+    choose: Chooser | None = None,
 ) -> list[dict[str, Any]]:
-    """Patch the itinerary in place. Returns the list of changes made (empty if none)."""
-    repair = _Repair(trip, itinerary, places)
+    """Patch the itinerary in place. Returns the list of changes made (empty if none).
+
+    Code finds the valid replacements; `choose` (an LLM) may pick the best of them.
+    Without `choose`, or if it gives no valid answer, the first valid one is used.
+    """
+    repair = _Repair(trip, itinerary, places, choose)
     repair.fix_closed_places()
     repair.fix_avoid_list()
     repair.fix_overlaps()
@@ -54,8 +67,9 @@ def repair_itinerary(
 
 
 class _Repair:
-    def __init__(self, trip, itinerary, places):
+    def __init__(self, trip, itinerary, places, choose=None):
         self.trip = trip
+        self.choose = choose
         self.itinerary = itinerary
         self.places = places
         self.mode = trip.get("mode", "walking")
@@ -137,13 +151,14 @@ class _Repair:
     # --- replace, remove, move ---------------------------------------------
 
     def _replace_or_remove(self, day, activity, rule, reason, cheaper_than=None) -> None:
-        replacement = self._find_replacement(day, activity, cheaper_than)
+        options = self._find_replacements(day, activity, cheaper_than)
         old_place = activity["place"]
         self.rejected_place_ids.add(old_place.get("id"))
-        if replacement is None:
+        if not options:
             day["activities"].remove(activity)
             self._record(activity, "removed", rule, reason, old_place, None)
             return
+        replacement, chosen_by, why = self._pick(activity, options, reason)
         activity.update(
             {
                 "place_id": replacement["id"],
@@ -151,11 +166,27 @@ class _Repair:
                 "est_cost": replacement.get("est_cost_low"),
                 "cost_basis": replacement.get("cost_basis", "unknown"),
                 "change_type": "replaced",
-                "reason": f"Replaced {old_place.get('name')}: {reason}",
+                "reason": f"Replaced {old_place.get('name')}: {reason}"
+                + (f" {why}" if why else ""),
                 "backups": [],  # the old place's backups no longer apply
             }
         )
         self._record(activity, "replaced", rule, reason, old_place, replacement)
+        self.changes[-1].update({"chosen_by": chosen_by, "why": why, "options": len(options)})
+
+    def _pick(self, activity, options, problem):
+        """Let `choose` (the LLM) pick among valid options; fall back to the first."""
+        if self.choose is None or len(options) == 1:
+            return options[0], "rule", None
+        try:
+            answer = self.choose(self.trip, activity, options, problem)
+        except Exception:
+            answer = None
+        if answer is not None:
+            index, why = answer
+            if isinstance(index, int) and 0 <= index < len(options):
+                return options[index], "llm", (why or "").strip()[:200] or None
+        return options[0], "rule-fallback", None
 
     def _move_after(self, day, first, second) -> None:
         start = datetime.fromisoformat(second["start"])
@@ -173,16 +204,20 @@ class _Repair:
         second["reason"] = f"Moved to {new_start:%H:%M} so it does not overlap."
         self._record(second, "moved", "overlap", "It overlapped the stop before.", None, None)
 
-    def _find_replacement(self, day, activity, cheaper_than=None) -> dict[str, Any] | None:
+    def _find_replacements(self, day, activity, cheaper_than=None) -> list[dict[str, Any]]:
+        """Valid replacements, best first by code's order (stored backups, then nearest)."""
         purpose = {str(tag).lower() for tag in activity.get("purpose_tags") or []}
         original = activity["place"]
         used = {a["place"].get("id") for _, a in self._all()}
         stored = [b.get("place") for b in activity.get("backups") or [] if b.get("place")]
         pool = sorted(self.places, key=lambda place: _distance(original, place))
 
+        options: list[dict[str, Any]] = []
         for candidate in [*stored, *pool]:
             place_id = candidate.get("id")
             if not place_id or place_id in used or place_id in self.rejected_place_ids:
+                continue
+            if any(option.get("id") == place_id for option in options):
                 continue
             types = {str(t).lower() for t in candidate.get("experience_types") or []}
             if purpose and not purpose & types:
@@ -191,8 +226,10 @@ class _Repair:
             if cheaper_than is not None and (cost is None or cost >= cheaper_than):
                 continue
             if self._fits(day, activity, candidate):
-                return candidate
-        return None
+                options.append(candidate)
+                if len(options) >= REPAIR_OPTIONS_FOR_LLM:
+                    break
+        return options
 
     def _fits(self, day, activity, candidate) -> bool:
         """Would the candidate pass the hard checks in this activity's time slot?"""

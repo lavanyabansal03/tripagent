@@ -12,6 +12,7 @@ from langgraph.types import interrupt
 from app.agents.backup import attach_backups
 from app.agents.discovery import discover_places
 from app.agents.planner import build_plan_with_repairs
+from app.agents.repair_choice import choose_with_llm
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
 
 
@@ -218,7 +219,7 @@ def build_trip_graph(
             return count
 
         itinerary, validation, repair_iterations, terminal, explanation = build_plan_with_repairs(
-            trip, state.get("places", []), add_backups=add_backups
+            trip, state.get("places", []), add_backups=add_backups, choose=choose_with_llm
         )
         logs = _log(state, "planner", "Built a day-by-day itinerary")
         if backup_errors:
@@ -243,6 +244,25 @@ def build_trip_graph(
                 "Replaced or rearranged activities and reran validation",
                 iteration=iteration,
                 event_type="loop",
+            )
+        choices = [c for c in itinerary.get("repairs", []) if c.get("options", 0) > 1]
+        if choices:
+            by_llm = [c for c in choices if c.get("chosen_by") == "llm"]
+            logs = _log(
+                {**state, "logs": logs},
+                "repair_choice",
+                f"LLM chose {len(by_llm)} of {len(choices)} replacements"
+                + ("" if len(by_llm) == len(choices) else "; code chose the rest"),
+                event_type="llm",
+                choices=[
+                    {
+                        "old": c["old_place"],
+                        "new": c["new_place"],
+                        "by": c["chosen_by"],
+                        "why": c["why"],
+                    }
+                    for c in choices
+                ],
             )
         validation_logs = _log(
             {**state, "logs": logs},

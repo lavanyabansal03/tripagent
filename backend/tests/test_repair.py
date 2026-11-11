@@ -97,6 +97,9 @@ def test_closed_place_is_replaced_and_nothing_else_moves():
             "old_place_id": "closed",
             "old_place": "Closed",
             "new_place": "Spare",
+            "chosen_by": "rule",  # one option, so no LLM needed
+            "why": None,
+            "options": 1,
         }
     ]
 
