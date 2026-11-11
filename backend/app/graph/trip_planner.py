@@ -206,11 +206,11 @@ def build_trip_graph(
         backup_counts: list[int] = []
         backup_errors: list[str] = []
 
-        def add_backups(itinerary: dict[str, Any]) -> int:
+        def add_backups(itinerary: dict[str, Any], only_ids: set[str] | None) -> int:
             # A4 runs before Repair so Repair can try stored backups first (docs/03 5.3).
             # A failure only means no backups; the plan itself is still good.
             try:
-                count = attach_backups(itinerary, trip)
+                count = attach_backups(itinerary, trip, only_ids=only_ids)
             except Exception as error:
                 backup_errors.append(str(error))
                 return 0
