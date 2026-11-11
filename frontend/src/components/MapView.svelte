@@ -162,6 +162,11 @@
     overflow: hidden;
     border: 1px solid var(--color-border);
   }
+  /* The real map fills the whole map box (it showed only 320px before). */
+  .mapbox {
+    position: absolute;
+    inset: 0;
+  }
   .schematic {
     display: block;
     width: 100%;

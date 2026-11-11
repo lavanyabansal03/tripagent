@@ -329,3 +329,41 @@ def test_unknown_touched_field_is_rejected():
     )
 
     assert response.status_code == 422
+
+
+def test_each_interest_and_avoid_item_says_where_it_came_from(monkeypatch):
+    fake_extraction(monkeypatch, interests=["museums", "Coffee"], avoid=["nightclubs"])
+
+    response = client.post(
+        "/api/trips",
+        json={
+            **FORM_DEFAULTS,
+            "interests": ["coffee"],
+            "free_text": "Museums and coffee, no nightclubs.",
+            "touched": ["interests"],
+        },
+    )
+
+    provenance = response.json()["requirements"]["provenance"]
+    assert provenance["interests.coffee"] == "explicit"  # picked in the form
+    assert provenance["interests.museums"] == "inferred"  # only in the note
+    assert provenance["avoid.nightclubs"] == "inferred"
+
+
+def test_untouched_form_default_interest_is_labelled_default_or_from_note(monkeypatch):
+    fake_extraction(monkeypatch, interests=["museums", "coffee"])
+
+    response = client.post(
+        "/api/trips",
+        json={
+            **FORM_DEFAULTS,
+            "interests": ["coffee", "parks"],  # the form's pre-selected chips
+            "free_text": "Museums and good coffee.",
+            "touched": ["destination"],  # the traveller never touched the interests
+        },
+    )
+
+    provenance = response.json()["requirements"]["provenance"]
+    assert provenance["interests.coffee"] == "inferred"  # also in the note
+    assert provenance["interests.parks"] == "default"  # only a form default
+    assert provenance["interests.museums"] == "inferred"

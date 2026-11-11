@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   formatCost,
   formatMoney,
+  formatPlaceTime,
   formatRelativeWhen,
   isStale,
   resolvePluralForTest,
@@ -58,5 +59,17 @@ describe('plural helper', () => {
   it('resolves exact and category branches', () => {
     expect(resolvePluralForTest('{n, plural, one {# thing} other {# things}}', 1)).toBe('1 thing')
     expect(resolvePluralForTest('{n, plural, one {# thing} other {# things}}', 5)).toBe('5 things')
+  })
+})
+
+describe('formatPlaceTime', () => {
+  it('shows the destination clock time, whatever the viewer time zone is', () => {
+    // 10:00 in Seattle is 18:00 UTC; the traveller must see 10:00.
+    expect(formatPlaceTime('2026-11-13T10:00:00-08:00', 'en')).toBe('10:00 AM')
+    expect(formatPlaceTime('2026-11-13T13:52:00-08:00', 'en')).toBe('1:52 PM')
+  })
+
+  it('keeps demo times without an offset as written', () => {
+    expect(formatPlaceTime('2026-10-12T11:00:00', 'en')).toBe('11:00 AM')
   })
 })

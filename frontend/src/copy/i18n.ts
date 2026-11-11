@@ -104,6 +104,23 @@ export function formatTime(iso: string, locale: Locale = activeLocale): string {
   return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(d)
 }
 
+/**
+ * Time of an activity as the traveller sees it at the destination.
+ * Plan times carry the destination's offset ("2026-11-13T10:00:00-08:00" is 10:00 in
+ * Seattle), so we show the clock time written in the string, not the viewer's own
+ * time zone. Use formatTime for moments like trace timestamps.
+ */
+export function formatPlaceTime(iso: string, locale: Locale = activeLocale): string {
+  const match = /T(\d{2}):(\d{2})/.exec(iso)
+  if (!match) return formatTime(iso, locale)
+  const clock = new Date(Date.UTC(2000, 0, 1, Number(match[1]), Number(match[2])))
+  return new Intl.DateTimeFormat(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(clock)
+}
+
 export function formatDate(iso: string, locale: Locale = activeLocale): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
