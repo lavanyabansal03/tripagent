@@ -378,7 +378,7 @@ def build_plan_with_repairs(
     places: list[dict[str, Any]],
     *,
     version: int = 1,
-    add_backups: Callable[[dict[str, Any]], int] | None = None,
+    add_backups: Callable[[dict[str, Any], set[str] | None], int] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int, str, str | None]:
     """L3 loop (docs/03 5.3): Planner -> Backup -> Validator -> Repair.
 
@@ -389,7 +389,7 @@ def build_plan_with_repairs(
     """
     itinerary, first_checks = plan_and_validate(trip, places, version=version)
     if add_backups is not None:
-        add_backups(itinerary)
+        add_backups(itinerary, None)  # every activity
     checks = first_checks
     itinerary["repairs"] = []
     best_score = violation_score(checks)
@@ -416,8 +416,15 @@ def build_plan_with_repairs(
             if stalls >= 2:
                 break  # not getting better (thrashing guard)
 
-    if add_backups is not None and itinerary["repairs"]:
-        add_backups(itinerary)  # replaced activities need backups for their new place
+    if add_backups is not None:
+        # Only activities that got a new place or time need new backups.
+        changed = {
+            change["activity_id"]
+            for change in itinerary["repairs"]
+            if change["change"] in ("replaced", "moved")
+        }
+        if changed:
+            add_backups(itinerary, changed)
     itinerary["validation"] = checks
     itinerary["score"] = 1.0 if all(c["passed"] for c in checks) else 0.5
     _attach_day_warnings(itinerary, checks)

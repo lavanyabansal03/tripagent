@@ -290,12 +290,14 @@ def find_backups(
     radius_min: int = 20,
     per_activity: int = BACKUPS_PER_ACTIVITY,
     max_searches: int = MAX_BACKUP_SEARCHES,
+    only_ids: set[str] | None = None,
 ) -> list[dict]:
     """Find up to `per_activity` backups for each important activity.
 
     Returns one result per important activity:
     {"activity_id", "purpose_tags", "backups": [Backup, ...], "reason"}.
     At most `max_searches` place searches are made for the whole plan.
+    With `only_ids`, only those activities are searched (the others keep theirs).
     """
 
     if radius_min <= 0:
@@ -316,6 +318,9 @@ def find_backups(
     results = []
 
     for activity in activities:
+        if only_ids is not None and activity.get("id") not in only_ids:
+            continue
+
         if activity.get("status") in SKIPPED_STATUSES:
             continue
 
@@ -390,14 +395,21 @@ def find_backups(
     return results
 
 
-def attach_backups(itinerary: dict, trip: dict, search=None) -> int:
-    """Store each activity's backups on the activity itself. Returns how many were found."""
-    results = find_backups({**itinerary, "requirements": trip}, search=search)
+def attach_backups(
+    itinerary: dict, trip: dict, search=None, only_ids: set[str] | None = None
+) -> int:
+    """Store backups on each activity (or only on `only_ids`).
+
+    Returns how many backups the whole plan has afterwards.
+    """
+    results = find_backups(
+        {**itinerary, "requirements": trip}, search=search, only_ids=only_ids
+    )
     by_activity = {result["activity_id"]: result["backups"] for result in results}
     total = 0
     for day in itinerary.get("days", []):
         for activity in day.get("activities", []):
             if activity.get("id") in by_activity:
                 activity["backups"] = by_activity[activity["id"]]
-                total += len(activity["backups"])
+            total += len(activity.get("backups") or [])
     return total

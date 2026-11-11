@@ -285,7 +285,7 @@ def test_backups_are_stored_before_repair_so_repair_can_use_them():
     backup_place = place("stored-backup", 47.6200)
     calls = []
 
-    def add_backups(itinerary):
+    def add_backups(itinerary, only_ids):
         calls.append(len(itinerary["repairs"]) if "repairs" in itinerary else "before")
         for day in itinerary["days"]:
             for item in day["activities"]:
@@ -321,3 +321,36 @@ def test_place_without_a_name_is_skipped_not_renamed():
 
     names = [a["place"]["name"] for day in itinerary["days"] for a in day["activities"]]
     assert names == ["Named"]
+
+
+def test_after_repair_only_changed_activities_get_new_backups():
+    places = [
+        place("open-1", 47.6100),
+        place("closed", 47.6101, hours=SUNDAY_ONLY),
+        place("open-2", 47.6102),
+        place("spare", 47.6103),
+    ]
+    calls = []
+
+    def add_backups(itinerary, only_ids):
+        calls.append(only_ids)
+        return 0
+
+    itinerary, *_ = build_plan_with_repairs(trip(), places, add_backups=add_backups)
+
+    replaced = [c["activity_id"] for c in itinerary["repairs"] if c["change"] == "replaced"]
+    assert calls[0] is None  # first round: every activity
+    assert calls[1] == set(replaced)  # second round: only the replaced one
+    assert len(calls) == 2
+
+
+def test_no_second_backup_round_when_nothing_was_repaired():
+    calls = []
+
+    def add_backups(itinerary, only_ids):
+        calls.append(only_ids)
+        return 0
+
+    build_plan_with_repairs(trip(), [place("a"), place("b", 47.6101)], add_backups=add_backups)
+
+    assert calls == [None]

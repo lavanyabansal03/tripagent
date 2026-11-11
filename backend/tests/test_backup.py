@@ -467,3 +467,46 @@ def test_attach_backups_stores_them_on_each_activity():
     activity = itinerary["days"][0]["activities"][0]
     assert total == 1
     assert activity["backups"][0]["place_id"] == "b1"
+
+
+def test_only_ids_limits_the_search_to_those_activities():
+    plan = make_plan()
+    second = dict(plan["days"][0]["activities"][0], id="A002")
+    second["start"] = "2026-11-10T13:00:00-08:00"
+    second["end"] = "2026-11-10T14:00:00-08:00"
+    plan["days"][0]["activities"].append(second)
+    searched = []
+
+    class RecordingSearch(FakePlaceSearch):
+        def search_places(self, **kwargs):
+            searched.append(kwargs["near"])
+            return super().search_places(**kwargs)
+
+    results = find_backups(
+        plan, RecordingSearch([make_place("b", "Cafe", ["cafe"])]), only_ids={"A002"}
+    )
+
+    assert [r["activity_id"] for r in results] == ["A002"]
+    assert len(searched) == 1
+
+
+def test_attach_backups_with_only_ids_keeps_the_others_and_counts_all():
+    plan = make_plan()
+    itinerary = {key: plan[key] for key in ("trip_id", "version", "days")}
+    first = itinerary["days"][0]["activities"][0]
+    first["backups"] = [{"place_id": "kept"}]
+    second = dict(first, id="A002", backups=[])
+    second["start"] = "2026-11-10T13:00:00-08:00"
+    second["end"] = "2026-11-10T14:00:00-08:00"
+    itinerary["days"][0]["activities"].append(second)
+
+    total = attach_backups(
+        itinerary,
+        plan["requirements"],
+        search=FakePlaceSearch([make_place("b1", "Cafe One", ["cafe"])]),
+        only_ids={"A002"},
+    )
+
+    assert first["backups"] == [{"place_id": "kept"}]  # untouched
+    assert second["backups"][0]["place_id"] == "b1"
+    assert total == 2  # the whole plan's backups
