@@ -13,8 +13,9 @@ from app.tools.seattle_seed import load_seattle_places
 # Rough average speeds in km/h. Real travel times will come from Mapbox later.
 SPEED_KMH: dict[str, float] = {"walking": 5, "cycling": 15, "transit": 15, "driving": 30}
 
-# A few everyday words mapped to our category names.
-_SYNONYMS = {"coffee": "cafe"}
+# Everyday words and phrases mapped to our category names. Longer phrases first, so
+# "coffee shop" is found before "coffee".
+_SYNONYMS = {"coffee shop": "cafe", "book store": "bookstore", "coffee": "cafe"}
 
 
 def distance_km(point: LatLng, lat: float, lng: float) -> float:
@@ -38,6 +39,28 @@ def _words(text: str) -> list[str]:
     return [w[:-1] if len(w) > 3 and w.endswith("s") else w for w in cleaned.split()]
 
 
+def _query_terms(query: str) -> list[set[str]]:
+    """Split what the user typed into terms. A place matches a term if it has any word in it.
+
+    "coffee shop" becomes one term {"cafe"}, so a cafe matches even without the word "shop".
+    "coffee" becomes {"cafe", "coffee"}, so "Victrola Coffee" matches by name or by category.
+    """
+    words = _words(query)
+    terms: list[set[str]] = []
+    i = 0
+    while i < len(words):
+        for phrase, category in _SYNONYMS.items():
+            phrase_words = phrase.split()
+            if words[i : i + len(phrase_words)] == phrase_words:
+                terms.append({category} if len(phrase_words) > 1 else {category, phrase})
+                i += len(phrase_words)
+                break
+        else:  # not a known phrase: the word itself must appear
+            terms.append({words[i]})
+            i += 1
+    return terms
+
+
 class MockPlaceSearch:
     """Searches the built-in Seattle seed places."""
 
@@ -53,14 +76,14 @@ class MockPlaceSearch:
         mode: Mode = "walking",
         limit: int = 20,
     ) -> list[Place]:
-        query_words = [_SYNONYMS.get(w, w) for w in _words(query)]
+        terms = _query_terms(query)
         wanted = {w for category in (categories or []) for w in _words(category)}
 
         found: list[tuple[float, Place]] = []
         for place in self._places:
-            labels = _words(" ".join([place.name, *place.categories, *place.experience_types]))
-            # Every word the user typed must appear somewhere in the place's name or labels.
-            if not all(any(q in label for label in labels) for q in query_words):
+            labels = set(_words(" ".join([place.name, *place.categories, *place.experience_types])))
+            # Whole words only: "bar" must not match "Barnes & Noble".
+            if not all(term & labels for term in terms):
                 continue
             kinds = set(_words(" ".join([*place.categories, *place.experience_types])))
             if wanted and not (wanted & kinds):

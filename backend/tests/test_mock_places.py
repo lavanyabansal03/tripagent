@@ -128,3 +128,25 @@ def test_impossible_latitude_is_rejected():
             id="x", sources=["seed"], name="x", lat=95, lng=0, address="",
             retrieved_at="2026-10-13T00:00:00Z",
         )
+
+
+def _place(name: str, categories: list[str]) -> Place:
+    return Place(
+        id=name, sources=["seed"], name=name, categories=categories, lat=47.6, lng=-122.3,
+        address="", retrieved_at="2026-11-05T00:00:00Z",
+    )
+
+
+def test_search_matches_whole_words_only():
+    small = MockPlaceSearch([_place("Barnes & Noble", ["bookstore"]), _place("Canon", ["bar"])])
+    assert names(small.search_places("bar")) == {"Canon"}
+
+
+def test_coffee_shop_phrase_finds_the_cafes():
+    assert names(search.search_places("coffee shop")) == names(search.search_places("coffee"))
+    assert names(search.search_places("coffee shops")) == names(search.search_places("coffee"))
+
+
+def test_multi_word_name_search():
+    assert "Pike Place Market" in names(search.search_places("pike place"))
+    assert search.search_places("pike zzzz") == []
