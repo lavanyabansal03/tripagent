@@ -5,6 +5,8 @@ pydantic-settings>=2.15
 python-dotenv>=1.2
 sqlalchemy>=2.1
 httpx>=0.28
+# Time zone data; Windows has none built in (used by the planner's local times).
+tzdata>=2025.2
 langgraph>=1.2
 langchain-google-genai>=4.4
 google-genai>=2.27

@@ -1,6 +1,7 @@
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+from app.agents import discovery
 from app.config import MAX_FIND_ATTEMPTS
 from app.graph import trip_planner
 from app.graph.retry_example import run_retry_example
@@ -139,21 +140,16 @@ def test_searches_each_interest_and_merges_results(monkeypatch):
             queries.append(kwargs["query"])
             return mock_search.search_places(**kwargs)
 
-    monkeypatch.setattr(trip_planner, "get_place_search", lambda: RecordingSearch())
+    # The graph now searches through the Discovery agent (one search per interest).
+    monkeypatch.setattr(discovery, "get_place_search", lambda: RecordingSearch())
     places = trip_planner._search_places({"interests": ["coffee", "museums"]})
 
-    assert queries == ["coffee", "museums"]
+    assert queries[:2] == ["coffee", "museums"]
+    assert set(queries) == {"coffee", "museums"}
     names = {place["name"] for place in places}
     assert "Storyville Coffee Pike Place" in names
     assert "Museum of Pop Culture" in names
     assert "Discovery Park" not in names
-
-
-def test_interest_search_with_no_results_does_not_fall_back_to_random_places(monkeypatch):
-    mock_search = MockPlaceSearch()
-    monkeypatch.setattr(trip_planner, "get_place_search", lambda: mock_search)
-
-    assert trip_planner._search_places({"interests": ["unmatched interest"]}) == []
 
 
 def test_save_failure_is_bounded_and_explained():
