@@ -21,7 +21,8 @@
   let destination = $state('Seattle')
   let startDate = $state(start)
   let endDate = $state(end)
-  let budget = $state<string>('500')
+  // A number box: Svelte gives a number when filled and null when empty.
+  let budget = $state<number | null>(500)
   let budgetStrict = $state(true)
   let mode = $state<TripFormInput['mode']>('transit')
   let pace = $state<TripFormInput['pace']>('moderate')
@@ -59,14 +60,27 @@
 
   function addInterest() {
     const value = interestInput.trim().toLowerCase()
-    if (value && !interests.includes(value)) interests = [...interests, value]
+    if (value && !interests.includes(value)) {
+      interests = [...interests, value]
+      mark('interests')
+    }
     interestInput = ''
   }
 
   function addAvoid() {
     const value = avoidInput.trim().toLowerCase()
-    if (value && !avoid.includes(value)) avoid = [...avoid, value]
+    if (value && !avoid.includes(value)) {
+      avoid = [...avoid, value]
+      mark('avoid')
+    }
     avoidInput = ''
+  }
+
+  /** The budget as a number, or null when the box is empty or not a number. */
+  function budgetValue(): number | null {
+    if (budget === null || budget === undefined || String(budget).trim() === '') return null
+    const value = Number(budget)
+    return Number.isFinite(value) ? value : null
   }
 
   function submit() {
@@ -74,7 +88,7 @@
       destination,
       start_date: startDate,
       end_date: endDate,
-      budget: budget.trim() === '' ? null : Number(budget),
+      budget: budgetValue(),
       budget_strictness: budgetStrict ? 'strict' : 'flexible',
       mode,
       pace,
@@ -173,7 +187,7 @@
       <div class="chips">
         {#each suggested as item (item)}
           <label class="chip" class:active={interests.includes(item)}>
-            <input type="checkbox" checked={interests.includes(item)} onchange={() => (interests = toggle(interests, item))} />
+            <input type="checkbox" checked={interests.includes(item)} onchange={() => { interests = toggle(interests, item); mark('interests') }} />
             {item}
           </label>
         {/each}
@@ -199,7 +213,7 @@
       <div class="chips">
         {#each ['culture', 'nightlife', 'shopping', 'food'] as item (item)}
           <label class="chip" class:active={avoid.includes(item)}>
-            <input type="checkbox" checked={avoid.includes(item)} onchange={() => (avoid = toggle(avoid, item))} />
+            <input type="checkbox" checked={avoid.includes(item)} onchange={() => { avoid = toggle(avoid, item); mark('avoid') }} />
             {item}
           </label>
         {/each}

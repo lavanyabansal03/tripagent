@@ -145,7 +145,8 @@ def test_searches_each_interest_and_merges_results(monkeypatch):
     places = trip_planner._search_places({"interests": ["coffee", "museums"]})
 
     assert queries[:2] == ["coffee", "museums"]
-    assert set(queries) == {"coffee", "museums"}
+    # Plus one lunch search, because neither interest brought a restaurant.
+    assert set(queries) == {"coffee", "museums", "restaurant"}
     names = {place["name"] for place in places}
     assert "Storyville Coffee Pike Place" in names
     assert "Museum of Pop Culture" in names

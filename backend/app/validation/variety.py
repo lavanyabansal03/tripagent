@@ -89,7 +89,8 @@ def check_variety(
             passed=False,
             severity="soft",
             message=(
-                f"Found {conflict_count} sequences with more than "
+                f"Found {conflict_count} "
+                f"{'sequence' if conflict_count == 1 else 'sequences'} with more than "
                 f"{max_consecutive} consecutive activities "
                 "of the same experience type."
             ),

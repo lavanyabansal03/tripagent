@@ -109,10 +109,14 @@
     "noPlan": "No plan yet.",
     "showWholeTrip": "Show whole trip",
     "showThisDay": "Show this day",
-    "reducedMotion": "Animations are reduced based on your device settings."
+    "reducedMotion": "Animations are reduced based on your device settings.",
+    "poweredByGeoapify": "Powered by Geoapify",
+    "osmCredit": "© OpenStreetMap contributors"
   },
   "validation": {
     "pass": "Everything fits: hours, travel times and budget.",
+    "passWithGaps": "No problems found, but some details are unknown. See below.",
+    "msgBudgetUnknownCosts": "Some stops have no listed price, so we can't fully check your budget.",
     "softWarning": "Day {day} has three cafés in a row. Want more variety?",
     "mixItUp": "Mix it up",
     "msgLeg": "A leg on this day is over your {max}-minute travel limit.",

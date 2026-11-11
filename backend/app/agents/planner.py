@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.agents.meals import is_meal_spot
 from app.agents.repair import hard_failures, repair_itinerary, violation_score
 from app.config import MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS
 from app.models.validation_result import ValidationResult
@@ -17,6 +18,14 @@ from app.validation.opening_hours import check_plan_opening_hours
 from app.validation.overlap import check_overlap
 from app.validation.travel_time import check_travel_time
 from app.validation.variety import check_variety
+
+# Stops per day for each pace, counting the lunch stop.
+STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 5}
+# Lunch goes after the first two stops of the day (about midday with a 9:00 start).
+LUNCH_SLOT = 2
+# A lunch spot should be open from at least 12:00 until 14:30 that day.
+LUNCH_OPEN_BY = time(12, 0)
+LUNCH_OPEN_UNTIL = time(14, 30)
 
 _DESTINATION_TIMEZONES = {
     "seattle": "America/Los_Angeles",
@@ -58,14 +67,53 @@ def _duration(place: dict[str, Any]) -> int:
     return 60
 
 
+def _stops_per_day(trip: dict[str, Any]) -> int:
+    """How many stops fit in a day for the traveller's pace (3 when no pace is given)."""
+    return STOPS_PER_DAY.get(str(trip.get("pace", "")), 3)
+
+
+def _clock(value: Any) -> time:
+    return value if isinstance(value, time) else time.fromisoformat(str(value))
+
+
+def _open_for_lunch(place: dict[str, Any], day_date: date | None) -> bool:
+    """Open across lunchtime on that weekday? Unknown hours count as yes (the card warns)."""
+    hours = place.get("hours")
+    if not hours or day_date is None:
+        return True
+    weekday = day_date.strftime("%A").lower()
+    try:
+        return any(
+            period["day"] == weekday
+            and _clock(period["open"]) <= LUNCH_OPEN_BY
+            and (period.get("closes_next_day") or _clock(period["close"]) >= LUNCH_OPEN_UNTIL)
+            for period in hours
+        )
+    except (KeyError, TypeError, ValueError):
+        return True
+
+
 def _schedule_days(
-    places: list[dict[str, Any]], day_count: int, repair_iteration: int = 0
+    places: list[dict[str, Any]],
+    day_count: int,
+    repair_iteration: int = 0,
+    per_day: int = 3,
+    dates: list[date] | None = None,
 ) -> list[list[dict[str, Any]]]:
-    """Cluster places by geographic proximity, then nearest-neighbour order each day."""
+    """Cluster places by geographic proximity, then nearest-neighbour order each day.
+
+    Each day also gets one lunch stop: a nearby restaurant that is open at lunchtime on
+    that weekday (dinner-only places are a last resort), placed around midday.
+    """
     buckets: list[list[dict[str, Any]]] = [[] for _ in range(day_count)]
-    candidates = places[: day_count * 3]
-    if not candidates:
+    # Keep a few restaurants aside (2 choices per day) for lunch; the rest plan as usual.
+    meals = [place for place in places if is_meal_spot(place)][: day_count * 2]
+    others = [place for place in places if not any(place is meal for meal in meals)]
+    candidates = others[: day_count * (per_day - 1 if meals else per_day)]
+    if not candidates and not meals:
         return buckets
+    if not candidates:
+        candidates, meals = meals, []
 
     def has_coordinates(place: dict[str, Any]) -> bool:
         return place.get("lat") is not None and place.get("lng") is not None
@@ -117,6 +165,21 @@ def _schedule_days(
             bucket.remove(nearest)
             ordered.append(nearest)
         buckets[day_index] = ordered
+
+    # Lunch: the unused restaurant closest to each day's stops, after the morning stops.
+    unused = list(meals)
+    for day_index, bucket in enumerate(buckets):
+        if not unused:
+            break
+        day_date = dates[day_index] if dates and day_index < len(dates) else None
+        choices = [m for m in unused if _open_for_lunch(m, day_date)] or unused
+        located_stops = [place for place in bucket if has_coordinates(place)]
+        meal = min(
+            choices,
+            key=lambda m: min((distance(m, stop) for stop in located_stops), default=0.0),
+        )
+        unused.remove(meal)
+        bucket.insert(min(LUNCH_SLOT, len(bucket)), meal)
     return buckets
 
 
@@ -153,6 +216,30 @@ def _fit_opening_hours(
     return earliest
 
 
+def _variety_message(days: list[dict[str, Any]], results: list[ValidationResult]) -> str:
+    """One readable sentence for the per-day variety checks.
+
+    Joining each day's sentence repeated "Found 1 sequences ..." once per day, so a
+    3-day trip showed it three times. Now: "Days 1, 2 and 3 have ... in a row."
+    """
+    soft_days = [
+        day["day"]
+        for day, result in zip(days, results)
+        if not result.passed and result.severity == "soft"
+    ]
+    other = [r.message for r in results if not r.passed and r.severity != "soft"]
+    parts: list[str] = []
+    if soft_days:
+        if len(soft_days) == 1:
+            label = f"Day {soft_days[0]} has"
+        else:
+            numbers = [str(n) for n in soft_days]
+            label = f"Days {', '.join(numbers[:-1])} and {numbers[-1]} have"
+        parts.append(f"{label} too many activities of the same kind in a row.")
+    parts.extend(dict.fromkeys(other))  # the same data-gap sentence only once
+    return " ".join(parts)
+
+
 def check_itinerary(
     trip: dict[str, Any], days: list[dict[str, Any]], *, trip_id: str, version: int
 ) -> list[ValidationResult]:
@@ -181,7 +268,7 @@ def check_itinerary(
             rule="variety",
             passed=False,
             severity=variety_failures[0].severity,
-            message=" ".join(result.message for result in variety_failures),
+            message=_variety_message(days, daily_variety),
             activity_ids=list(
                 dict.fromkeys(
                     activity_id
@@ -259,7 +346,8 @@ def plan_and_validate(
     daily_end = _as_time(trip.get("daily_end", "20:00"), time(20, 0))
     destination_timezone = _destination_timezone(str(trip.get("destination", "")))
     mode: Mode = trip.get("mode", "walking")
-    buckets = _schedule_days(places, day_count, repair_iteration)
+    dates = [start_date + timedelta(days=i) for i in range(day_count)]
+    buckets = _schedule_days(places, day_count, repair_iteration, _stops_per_day(trip), dates)
     days: list[dict[str, Any]] = []
     all_activities: list[dict[str, Any]] = []
     unscheduled_places: list[str] = []

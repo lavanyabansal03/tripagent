@@ -14,11 +14,13 @@ in a named state:
 """
 
 from collections.abc import Callable
+from datetime import date
 from difflib import SequenceMatcher
 from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from app.agents.meals import diet_words, is_meal_spot
 from app.config import MAX_DISCOVERY_CALLS
 from app.tools import PlaceSearch, get_place_search
 from app.tools.base import LatLng
@@ -81,6 +83,53 @@ def _mix(per_interest: dict[str, list[str]], found: list[Place]) -> list[Place]:
                     ordered.append(place_id)
     ordered += [place.id for place in found if place.id not in ordered]
     return [by_id[place_id] for place_id in ordered]
+
+
+def _trip_days(trip: dict[str, Any]) -> int:
+    try:
+        start = date.fromisoformat(str(trip["start_date"]))
+        end = date.fromisoformat(str(trip["end_date"]))
+        return max(1, (end - start).days + 1)
+    except (KeyError, ValueError):
+        return 1
+
+
+def _add_lunch_spots(
+    trip: dict[str, Any],
+    search: PlaceSearch,
+    found: list[Place],
+    mode: str,
+    calls: int,
+    failures: int,
+    max_calls: int,
+) -> tuple[int, int]:
+    """Every day needs lunch. If the interests did not bring a restaurant for each day,
+    search for some (vegetarian ones when the traveller said so). Uses at most 2 calls and
+    never goes over the search cap. Returns the updated (calls, failures).
+    """
+    if not found:
+        return calls, failures  # nothing to plan around anyway
+    if sum(is_meal_spot(p.model_dump()) for p in found) >= _trip_days(trip):
+        return calls, failures
+    queries = [" ".join([*diet_words(trip), "restaurant"])]
+    if queries[0] != "restaurant":
+        queries.append("restaurant")  # no diet-labelled ones nearby: any restaurant
+    for query in queries:
+        if calls >= max_calls:
+            break
+        calls += 1
+        try:
+            results = search.search_places(
+                query=query, categories=["restaurant"], mode=mode, limit=RESULTS_PER_SEARCH
+            )
+        except Exception:
+            failures += 1
+            continue
+        for result in results:
+            _add(found, result)
+        if results:
+            break
+    return calls, failures
 
 
 def discover_places(
@@ -156,6 +205,8 @@ def discover_places(
                 _add(found, result)
         except Exception:
             failures += 1
+
+    calls, failures = _add_lunch_spots(trip, search, found, mode, calls, failures, max_calls)
 
     coverage = {interest: len(ids) for interest, ids in per_interest.items()}
     short = [interest or "anything" for interest, n in coverage.items() if n < MIN_PER_INTEREST]
