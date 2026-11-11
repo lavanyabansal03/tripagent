@@ -27,7 +27,7 @@ services.
 
    Names include the repo owner because `onrender.com` subdomains are global; if
    Render says a name is taken, change it in both services (the frontend's
-   `VITE_API_BASE` follows the API service by name).
+   `VITE_API_BASE` in `render.yaml` holds the API's public address).
 4. When prompted, paste any secrets (all optional while `DEMO_MODE=true`). The
    Mapbox public token is optional — without it the app uses the schematic map
    fallback.
@@ -52,7 +52,7 @@ Frontend (`tripagent-web-lavanyabansal03`):
 | Key | Value |
 |-----|-------|
 | `VITE_DEMO_MODE` | `true` (set `false` once trip endpoints exist) |
-| `VITE_API_BASE` | the API service's host (the Blueprint resolves it via `fromService`) |
+| `VITE_API_BASE` | the API's public address, `https://tripagent-api-lavanyabansal03.onrender.com` (set in `render.yaml`; Render's `fromService` host is a private name browsers cannot reach) |
 | `VITE_MAPBOX_PUBLIC_TOKEN` | optional, URL-restricted **public** token only |
 
 > Never put a secret Mapbox/server key in a `VITE_` variable — those are baked
