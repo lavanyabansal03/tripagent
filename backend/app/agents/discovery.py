@@ -1,7 +1,9 @@
 """Discovery agent: find enough candidate places for a trip, one interest at a time.
 
-This is a bounded tool loop with no LLM (the rule: deterministic code decides).
-  1. One focused search per interest ("museum" in the museum category).
+This is a bounded tool loop. An LLM may translate each interest into search words
+first (app/agents/discovery_plan.py); code checks the words and runs every search.
+  1. One focused search per interest: with the LLM's search words ("hiking" -> nature,
+     park) when it gave usable ones, else the interest itself ("museum").
   2. For interests that came back with too few places, one wider search (any category).
   3. Merge duplicates (same id, or a very similar name less than 50 m away).
 It stops at a hard cap of search calls (MAX_DISCOVERY_CALLS in config.py) and always ends
@@ -11,6 +13,7 @@ in a named state:
   ERROR       every search call failed
 """
 
+from collections.abc import Callable
 from difflib import SequenceMatcher
 from typing import Any, Literal
 
@@ -35,6 +38,7 @@ class DiscoveryResult(BaseModel):
     coverage: dict[str, int]  # interest -> how many places we found for it
     calls_used: int
     reason: str
+    search_words: dict[str, list[str]] = {}  # interest -> words the LLM chose (empty: none)
 
 
 def _same_place(a: Place, b: Place) -> bool:
@@ -83,13 +87,23 @@ def discover_places(
     trip: dict[str, Any],
     search: PlaceSearch | None = None,
     max_calls: int = MAX_DISCOVERY_CALLS,
+    plan: Callable[[dict[str, Any], list[str]], dict[str, list[str]]] | None = None,
 ) -> DiscoveryResult:
-    """Find candidate places for the trip's interests within a fixed number of searches."""
+    """Find candidate places for the trip's interests within a fixed number of searches.
+
+    `plan` (an LLM) may give search words per interest; it never adds a search call.
+    """
     search = search or get_place_search()
     mode = trip.get("mode", "walking")
     interests = [str(i).strip() for i in trip.get("interests", []) if str(i).strip()]
     if not interests:
         interests = [""]  # no interests given: one search for anything good nearby
+    search_words: dict[str, list[str]] = {}
+    if plan is not None and interests != [""]:
+        try:
+            search_words = plan(trip, interests) or {}
+        except Exception:
+            search_words = {}  # no plan: search the interests as written
 
     found: list[Place] = []
     per_interest: dict[str, list[str]] = {interest: [] for interest in interests}
@@ -108,7 +122,14 @@ def discover_places(
                 break
             calls += 1
             try:
-                if step == "focused":
+                if step == "focused" and search_words.get(interest):
+                    results = search.search_places(
+                        query="",
+                        categories=search_words[interest],
+                        mode=mode,
+                        limit=RESULTS_PER_SEARCH,
+                    )
+                elif step == "focused":
                     results = search.search_places(
                         query=interest,
                         categories=[interest] if interest else None,
@@ -153,4 +174,5 @@ def discover_places(
         coverage=coverage,
         calls_used=calls,
         reason=reason,
+        search_words=search_words,
     )
