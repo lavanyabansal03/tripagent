@@ -8,13 +8,29 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.agents.preferences import extract_preferences
+from app.agents.preferences import Preferences, extract_preferences
 from app.graph.trip_planner import build_trip_graph
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 runs_router = APIRouter(prefix="/runs", tags=["runs"])
 trip_graph = build_trip_graph()
 logger = logging.getLogger(__name__)
+
+# Form fields the traveller can change. The Svelte form sends every field
+# (defaults included) and lists the ones the traveller changed in `touched`.
+FormField = Literal[
+    "destination",
+    "start_date",
+    "end_date",
+    "budget",
+    "budget_strictness",
+    "mode",
+    "pace",
+    "max_travel_min",
+    "interests",
+    "avoid",
+    "tourist_local_ratio",
+]
 
 
 class TripRequest(BaseModel):
@@ -32,6 +48,14 @@ class TripRequest(BaseModel):
     avoid: list[str] = Field(default_factory=list)
     tourist_local_ratio: int = Field(default=50, ge=0, le=100)
     free_text: str = ""
+    # None = an older client that does not say; then any field it sent counts as chosen.
+    touched: list[FormField] | None = None
+
+    def user_chose(self, field: str) -> bool:
+        """True when the traveller set this field themselves (not a form default)."""
+        if self.touched is not None:
+            return field in self.touched
+        return field in self.model_fields_set
 
     @model_validator(mode="after")
     def validate_trip_dates(self) -> "TripRequest":
@@ -175,6 +199,52 @@ def _questions_for(start_date: str | None, end_date: str | None) -> list[Questio
     return questions
 
 
+def _read_note(free_text: str) -> Preferences:
+    """Ask the Preferences agent to read the "Tell us more" note.
+
+    Reading the note is an extra: if there is no note, no API key, or Gemini
+    fails, the trip is still created from the form alone.
+    """
+    if not free_text.strip():
+        return Preferences()
+    try:
+        return extract_preferences(free_text) or Preferences()
+    except Exception:
+        logger.warning("Could not read the trip note; using form values only", exc_info=True)
+        return Preferences()
+
+
+def _merge_items(from_form: list[str], from_note: list[str]) -> list[str]:
+    """Form items first, then new items from the note; same word in any case counts once."""
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in [*from_form, *from_note]:
+        key = item.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
+def _form_provenance(request: TripRequest) -> dict[str, str]:
+    """Label each form value "explicit" (traveller chose it) or "default" (we assumed it)."""
+    provenance = {"destination": "explicit"}
+    for field in ("start_date", "end_date"):
+        provenance[field] = "explicit" if getattr(request, field) else "default"
+    for field in (
+        "budget",
+        "budget_strictness",
+        "mode",
+        "pace",
+        "max_travel_min",
+        "tourist_local_ratio",
+        "interests",
+        "avoid",
+    ):
+        provenance[field] = "explicit" if request.user_chose(field) else "default"
+    return provenance
+
+
 @router.post("", response_model=CreateTripResponse, status_code=201)
 def create_trip(request: TripRequest) -> CreateTripResponse:
     trip_id = str(uuid4())
@@ -182,28 +252,21 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
     end_date = request.end_date or ""
     now = datetime.now(UTC).isoformat()
 
-    extracted_interests: list[str] = []
-    extracted_avoid: list[str] = []
-    extracted_max_travel_min: int | None = None
-    if request.free_text.strip():
-        try:
-            preferences = extract_preferences(request.free_text)
-            extracted_interests = preferences.interests
-            extracted_avoid = preferences.avoid
-            extracted_max_travel_min = preferences.max_travel_minutes
-        except Exception:
-            # Preference extraction is an enhancement; trip creation must still work.
-            logger.warning("Preference extraction failed; using form values and defaults")
+    note = _read_note(request.free_text)
+    interests = _merge_items(request.interests, note.interests)
+    avoid = _merge_items(request.avoid, note.avoid)
 
-    interests = list(dict.fromkeys([*request.interests, *extracted_interests]))
-    avoid = list(dict.fromkeys([*request.avoid, *extracted_avoid]))
+    # A number from the note replaces a form value only if the traveller never set it.
     max_travel_min = request.max_travel_min
     if (
-        extracted_max_travel_min is not None
-        and "max_travel_min" not in request.model_fields_set
-        and extracted_max_travel_min >= 1
+        note.max_travel_min is not None
+        and note.max_travel_min >= 1
+        and not request.user_chose("max_travel_min")
     ):
-        max_travel_min = extracted_max_travel_min
+        max_travel_min = note.max_travel_min
+    budget = request.budget
+    if note.budget_max is not None and not request.user_chose("budget"):
+        budget = note.budget_max
 
     trip = Trip(
         id=trip_id,
@@ -214,25 +277,22 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
         current_version=0,
         created_at=now,
     )
-    provenance = {
-        "destination": "explicit",
-        "start_date": "explicit" if start_date else "default",
-        "end_date": "explicit" if end_date else "default",
-        "mode": "explicit",
-        "pace": "explicit",
-    }
-    if extracted_interests and not request.interests:
+    provenance = _form_provenance(request)
+    # Values taken from the note are marked "inferred" (docs/contracts.md open decision 7).
+    if note.interests and not request.interests:
         provenance["interests"] = "inferred"
-    if extracted_avoid and not request.avoid:
+    if note.avoid and not request.avoid:
         provenance["avoid"] = "inferred"
     if max_travel_min != request.max_travel_min:
         provenance["max_travel_min"] = "inferred"
+    if budget != request.budget:
+        provenance["budget"] = "inferred"
     requirements = TripRequirements(
         trip_id=trip_id,
         destination=request.destination,
         start_date=start_date,
         end_date=end_date,
-        budget=request.budget,
+        budget=budget,
         budget_strictness=request.budget_strictness,
         mode=request.mode,
         pace=request.pace,

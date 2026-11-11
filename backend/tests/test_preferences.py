@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 from google.genai import errors
 
-from app.agents.preferences import MAX_TRIES, Preferences, call_with_retry
+from app.agents import preferences as preferences_agent
+from app.agents.preferences import (
+    MAX_TRIES,
+    Preferences,
+    call_with_retry,
+    extract_preferences,
+)
+from app.config import GEMINI_TIMEOUT_SECONDS, settings
 
 EXPECTED_FILE = Path(__file__).with_name("preferences_expected.json")
 
@@ -58,3 +65,34 @@ def test_retry_does_not_repeat_other_errors():
     with pytest.raises(errors.APIError):
         call_with_retry(call, sleep=waits.append)
     assert waits == []
+
+
+def test_missing_api_key_skips_extraction(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "")
+
+    assert extract_preferences("I want beaches and seafood.") is None
+
+
+def test_gemini_call_has_a_time_limit(monkeypatch):
+    """A slow Gemini answer must not hang trip creation forever."""
+    created = {}
+
+    class FakeModels:
+        def generate_content(self, **_kwargs):
+            class Answer:
+                text = '{"interests": ["coffee"], "avoid": []}'
+
+            return Answer()
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            created.update(kwargs)
+            self.models = FakeModels()
+
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "test-key")
+    monkeypatch.setattr(preferences_agent.genai, "Client", FakeClient)
+
+    result = extract_preferences("I love coffee.")
+
+    assert result.interests == ["coffee"]
+    assert created["http_options"].timeout == GEMINI_TIMEOUT_SECONDS * 1000

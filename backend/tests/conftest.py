@@ -1,0 +1,19 @@
+"""Shared pytest setup.
+
+Ordinary tests must never call the real Gemini API: it is slow, rate-limited on
+the free tier, and makes results depend on the network. Every test runs as if
+no API key were set, except the live preference test, which is meant to call
+Gemini and skips itself when no key is available.
+"""
+
+import pytest
+
+from app.config import settings
+
+LIVE_TEST_MODULES = {"test_preferences_live"}
+
+
+@pytest.fixture(autouse=True)
+def no_real_gemini_calls(request, monkeypatch):
+    if request.module.__name__.rsplit(".", 1)[-1] not in LIVE_TEST_MODULES:
+        monkeypatch.setattr(settings, "GOOGLE_API_KEY", "")
