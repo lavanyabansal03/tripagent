@@ -177,7 +177,7 @@ The structure supports incomplete external API information.
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | Required |
-| `sources` | `Array<mapbox \| foursquare \| seed>` | Existing provider labels |
+| `sources` | `Array<mapbox \| foursquare \| geoapify \| seed>` | Provider labels (`geoapify` added by ADR-010) |
 | `provider_ids` | `Record<string, string>` | Provider identifiers |
 | `name` | string | Nonempty |
 | `categories` | string[] | Provider categories |

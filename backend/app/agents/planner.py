@@ -1,5 +1,6 @@
 """Deterministic itinerary scheduling and validation for the Planner agent."""
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from uuid import uuid4
@@ -246,11 +247,12 @@ def plan_and_validate(
         {
             **place,
             "id": place.get("id") or f"place-{index + 1}",
-            "name": place.get("name") or f"Place {index + 1}",
+            "name": place["name"],
             "experience_types": place.get("experience_types", []),
             "hours": place.get("hours") if isinstance(place.get("hours"), list) else None,
         }
         for index, place in enumerate(places)
+        if place.get("name")  # never invent a name (CLAUDE.md "Never invent data")
     ]
     day_count = (end_date - start_date).days + 1
     daily_start = _as_time(trip.get("daily_start", "09:00"), time(9, 0))
@@ -358,16 +360,36 @@ def _with_daily_schedule(
     return checks + [c for c in first_checks if c["rule"] == "daily_schedule"]
 
 
-def build_plan_with_repairs(
-    trip: dict[str, Any], places: list[dict[str, Any]], *, version: int = 1
-) -> tuple[dict[str, Any], list[dict[str, Any]], int, str, str | None]:
-    """L3 loop (docs/03 5.3): plan once, then patch only the broken activities.
+def _attach_day_warnings(itinerary: dict[str, Any], checks: list[dict[str, Any]]) -> None:
+    """Give each day the failed checks about its own activities (contracts: ItineraryDay).
 
-    Exits: PASS when no hard problem is left; INFEASIBLE after MAX_REPAIR_ITERATIONS
-    tries, when a try changes nothing, or when the violation score stops improving
-    twice in a row.
+    Checks that name no activity (for example "no activities") stay plan-wide in
+    itinerary["validation"]; the screen shows those too.
+    """
+    for day in itinerary["days"]:
+        ids = {activity["id"] for activity in day["activities"]}
+        day["warnings"] = [
+            check for check in checks if not check["passed"] and ids & set(check["activity_ids"])
+        ]
+
+
+def build_plan_with_repairs(
+    trip: dict[str, Any],
+    places: list[dict[str, Any]],
+    *,
+    version: int = 1,
+    add_backups: Callable[[dict[str, Any]], int] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], int, str, str | None]:
+    """L3 loop (docs/03 5.3): Planner -> Backup -> Validator -> Repair.
+
+    Plan once, store backups (so Repair can try them first), then patch only the
+    broken activities. Exits: PASS when no hard problem is left; INFEASIBLE after
+    MAX_REPAIR_ITERATIONS tries, when a try changes nothing, or when the violation
+    score stops improving twice in a row.
     """
     itinerary, first_checks = plan_and_validate(trip, places, version=version)
+    if add_backups is not None:
+        add_backups(itinerary)
     checks = first_checks
     itinerary["repairs"] = []
     best_score = violation_score(checks)
@@ -394,8 +416,11 @@ def build_plan_with_repairs(
             if stalls >= 2:
                 break  # not getting better (thrashing guard)
 
+    if add_backups is not None and itinerary["repairs"]:
+        add_backups(itinerary)  # replaced activities need backups for their new place
     itinerary["validation"] = checks
     itinerary["score"] = 1.0 if all(c["passed"] for c in checks) else 0.5
+    _attach_day_warnings(itinerary, checks)
     if not hard_failures(checks):
         return itinerary, checks, iterations, "PASS", None
     explanation = (

@@ -64,6 +64,17 @@ describe('ActivityCard', () => {
     expect(screen.getByText('Added')).toBeInTheDocument()
   })
 
+  it('shows backups but disables swapping when the backend cannot swap yet', async () => {
+    const onswap = vi.fn()
+    render(ActivityCard, { activity: makeActivity(), onswap, canSwap: false })
+    await fireEvent.click(screen.getByRole('button', { name: /Backups/ }))
+    expect(screen.getByText(demoPlaces[4].name)).toBeInTheDocument()
+    const swap = screen.getByRole('button', { name: 'Replaced' })
+    expect(swap).toBeDisabled()
+    await fireEvent.click(swap)
+    expect(onswap).not.toHaveBeenCalled()
+  })
+
   it('expands backups and calls onswap when one is chosen', async () => {
     const onswap = vi.fn()
     render(ActivityCard, { activity: makeActivity(), onswap })

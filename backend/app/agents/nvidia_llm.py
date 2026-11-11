@@ -10,11 +10,11 @@ import time
 
 import httpx
 
-from app.config import NVIDIA_BASE_URL, NVIDIA_TIMEOUT_SECONDS, settings
+from app.config import LLM_MAX_TRIES, NVIDIA_BASE_URL, NVIDIA_TIMEOUT_SECONDS, settings
 
 # Busy answers worth one more try (too many requests, server busy or slow).
 RETRY_CODES = {429, 503, 504}
-MAX_TRIES = 3
+MAX_TRIES = LLM_MAX_TRIES  # from config.py
 
 
 class NvidiaError(Exception):

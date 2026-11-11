@@ -274,3 +274,50 @@ def test_violation_score_counts_hard_as_100_and_soft_as_1():
     ]
 
     assert violation_score(checks) == 101
+
+
+# --- Drift fixes: Backup before Repair, day warnings, no invented names ----
+
+
+def test_backups_are_stored_before_repair_so_repair_can_use_them():
+    """docs/03 5.3 order: Planner -> Backup -> Validator -> Repair."""
+    places = [place("closed", hours=SUNDAY_ONLY), place("unused-nearer", 47.6101)]
+    backup_place = place("stored-backup", 47.6200)
+    calls = []
+
+    def add_backups(itinerary):
+        calls.append(len(itinerary["repairs"]) if "repairs" in itinerary else "before")
+        for day in itinerary["days"]:
+            for item in day["activities"]:
+                if item["place_id"] == "closed":
+                    item["backups"] = [{"place_id": "stored-backup", "place": backup_place}]
+        return 1
+
+    itinerary, _checks, _repairs, terminal, _ = build_plan_with_repairs(
+        trip(), places[:1], add_backups=add_backups
+    )
+
+    assert calls[0] == "before"  # first call happens before any repair
+    assert terminal == "PASS"
+    assert itinerary["days"][0]["activities"][0]["place_id"] == "stored-backup"
+
+
+def test_each_day_lists_its_own_failed_checks():
+    # Two stops far apart: over a 10-minute limit (soft), so nothing is repaired.
+    itinerary, checks, *_ = build_plan_with_repairs(
+        trip(max_travel_min=10), [place("a", 47.610), place("b", 47.642)]
+    )
+
+    warnings = itinerary["days"][0]["warnings"]
+    assert [w["rule"] for w in warnings if w["rule"] == "travel_time"] == ["travel_time"]
+    assert all(not w["passed"] for w in warnings)
+
+
+def test_place_without_a_name_is_skipped_not_renamed():
+    nameless = place("nameless", 47.6101)
+    nameless["name"] = ""
+
+    itinerary, *_ = plan_and_validate(trip(), [place("named"), nameless])
+
+    names = [a["place"]["name"] for day in itinerary["days"] for a in day["activities"]]
+    assert names == ["Named"]

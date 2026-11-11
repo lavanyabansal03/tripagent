@@ -6,7 +6,7 @@
    */
   import { t } from '../copy/i18n'
   import type { ChangeEvent, Place } from '../types'
-  import { mockEngine } from '../api/client'
+  import { CHANGES_AVAILABLE, mockEngine } from '../api/client'
   import { store } from '../state/store.svelte'
   import ActivityCard from '../components/ActivityCard.svelte'
   import AdjustTripDialog from '../components/AdjustTripDialog.svelte'
@@ -33,8 +33,16 @@
       ? (mockEngine.getItinerary(store.trip?.id ?? '', itinerary.version - 1) ?? null)
       : null,
   )
-  const canUndo = $derived(store.versions.indexOf(store.trip?.current_version ?? 0) > 0)
+  const canUndo = $derived(
+    CHANGES_AVAILABLE && store.versions.indexOf(store.trip?.current_version ?? 0) > 0,
+  )
   const infeasible = $derived(store.infeasible)
+
+  // Problems that name no single activity apply to the whole plan; show them on every day.
+  const planWide = $derived(
+    (itinerary?.validation ?? []).filter((v) => !v.passed && v.activity_ids.length === 0),
+  )
+  const dayResults = $derived(activeDay ? [...planWide, ...activeDay.warnings] : [])
 
   const dayList = $derived(
     days.map((d) => ({
@@ -89,10 +97,12 @@
             {t('itinerary.undo')}
           </button>
         {/if}
-        <button type="button" class="tool primary-tool" onclick={() => (adjustOpen = true)}>
-          <Icon name="refresh" size={15} />
-          {t('itinerary.adjustTrip')}
-        </button>
+        {#if CHANGES_AVAILABLE}
+          <button type="button" class="tool primary-tool" onclick={() => (adjustOpen = true)}>
+            <Icon name="refresh" size={15} />
+            {t('itinerary.adjustTrip')}
+          </button>
+        {/if}
         <button type="button" class="tool" onclick={() => (mobileTab = mobileTab === 'trace' ? 'plan' : 'trace')}>
           <Icon name="trace" size={15} />
           {t('itinerary.trace')}
@@ -132,9 +142,9 @@
         <div class="day-panel" id="day-panel-{day}" role="tabpanel" aria-labelledby="day-tab-{day}">
           {#if activeDay}
             <ValidationSummary
-              results={activeDay.warnings}
+              results={dayResults}
               maxTravelMin={store.requirements?.max_travel_min ?? 30}
-              onMixItUp={() => store.simulate('diversity')}
+              onMixItUp={CHANGES_AVAILABLE ? () => store.simulate('diversity') : undefined}
             />
             <ol class="activities">
               {#each activeDay.activities as activity, i (activity.id)}
@@ -142,6 +152,7 @@
                   <ActivityCard
                     {activity}
                     busy={store.busy}
+                    canSwap={CHANGES_AVAILABLE}
                     onswap={(backupId, name) => handleSwap(activity.id, backupId, name)}
                     onlocktoggle={handleLock}
                     onfocusmap={(p) => {

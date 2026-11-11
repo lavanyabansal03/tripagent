@@ -67,7 +67,9 @@
                 type="button"
                 class="swap"
                 disabled={disabled || activity.status === 'locked'}
-                onclick={() => onswap(backup.place_id, placeName(backup.place_id))}
+                onclick={() => {
+                  if (!disabled) onswap(backup.place_id, placeName(backup.place_id))
+                }}
               >
                 {t('change.replaced')}
               </button>

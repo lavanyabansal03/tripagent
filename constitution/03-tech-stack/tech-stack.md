@@ -14,7 +14,7 @@ it is not installed yet.
 | API | FastAPI + Uvicorn | REST API; all routes under `/api` | Installed |
 | Data shapes | Pydantic v2 + pydantic-settings | Typed contracts, settings from env | Installed |
 | Orchestration | LangGraph | State graph, conditional edges, checkpoints, interrupts (ADR-001) | Installed |
-| LLM | Google Gemini API, free tier, **Flash models**, via `google-genai` and `langchain-google-genai` | Extraction, ordering proposals, repair choice, explanations (ADR-007) | Installed |
+| LLM | Google Gemini API, free tier, **Flash models**, via `google-genai`; NVIDIA Nemotron as backup (ADR-009) | Extraction, ordering proposals, repair choice, explanations (ADR-007) | In use (A1 Intake) |
 | HTTP client | httpx | Calls to Mapbox and Foursquare | Installed |
 | Persistence | SQLAlchemy | ORM for trips, versions, events | Installed |
 | Migrations | Alembic | Schema migrations | Planned |
@@ -27,10 +27,11 @@ it is not installed yet.
 
 | Provider | Used for | Key | Status |
 |---|---|---|---|
-| Google Gemini (AI Studio) | All LLM steps | `GOOGLE_API_KEY`, one per engineer | Key slot in config |
+| Google Gemini (AI Studio) | All LLM steps | `GOOGLE_API_KEY`, one per engineer | In use |
+| NVIDIA Nemotron (build.nvidia.com) | Backup LLM when Gemini fails (ADR-009) | `NVIDIA_API_KEY`; `LLM_PRIMARY` picks the order | In use |
 | Mapbox | Search, Directions, Matrix (travel times), GL JS map | `MAPBOX_SECRET_TOKEN` (server); URL-restricted public token (browser) | Key slot in config |
-| Foursquare Places | Hours, price level, ratings, review counts, popularity (ADR-003) | `FOURSQUARE_API_KEY` | Key slot in config |
-| Curated seed data | Permanent test and demo fallback (ADR-003 option D) | none | Planned |
+| Geoapify Places | Places and opening hours from OpenStreetMap; no ratings or prices (ADR-010, replaced Foursquare) | `GEOAPIFY_API_KEY` | In use when `DEMO_MODE=false` |
+| Curated seed data | Permanent test and demo fallback (ADR-003 option D) | none | In use (Seattle) |
 | Events provider (P1) | Current events | TBD | Undecided |
 
 **Free-tier limit:** Gemini allows about 10-15 requests per minute per project. Handle 429 with

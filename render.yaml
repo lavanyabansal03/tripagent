@@ -45,8 +45,6 @@ services:
         sync: false
       - key: MAPBOX_SECRET_TOKEN
         sync: false
-      - key: FOURSQUARE_API_KEY
-        sync: false
       - key: GEOAPIFY_API_KEY
         sync: false
 
