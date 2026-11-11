@@ -33,8 +33,10 @@ services:
       # once the provider keys below are supplied and the live tools are wired.
       - key: DEMO_MODE
         value: "true"
+      # Postgres connection string (for example from Neon). Secret: paste it in the
+      # Render dashboard. Empty -> a SQLite file, which Render wipes on every restart.
       - key: DATABASE_URL
-        value: sqlite:///./tripagent.db
+        sync: false
       # The API has no cookies/auth, so any origin may call it. Tighten to the
       # frontend URL once it is known.
       - key: CORS_ORIGINS

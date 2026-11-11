@@ -31,7 +31,8 @@ and explains why. Final presentation: **Monday, November 2, 2026**.
 one. Grow toward 9.1 only when a story needs it.
 
 ## Stack
-- Backend: Python 3.12, FastAPI, Pydantic v2, LangGraph, SQLAlchemy (SQLite locally)
+- Backend: Python 3.12, FastAPI, Pydantic v2, LangGraph, SQLAlchemy (SQLite locally, Postgres/Neon online);
+  only `backend/app/storage.py` talks to the database
 - LLM: **Google Gemini API, free tier, Flash models** via `google-genai`.
   **Never use OpenAI.** Model names live in `backend/app/config.py`.
   Backup LLM: NVIDIA Nemotron (build.nvidia.com) over plain HTTP; `LLM_PRIMARY` picks the order (ADR-009).

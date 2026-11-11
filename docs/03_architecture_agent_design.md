@@ -498,7 +498,7 @@ The budget validator checks the sum of upper-bound estimates against the budget 
 
 ### ADR-005: Relational database with versioned itineraries
 
-**Status:** Accepted. **Decision:** SQLite locally, managed Postgres in production, through SQLAlchemy + Alembic. Every accepted replan creates a new ItineraryVersion instead of overwriting. **Consequences:** undo and before/after diffs become trivial; storage grows slowly (acceptable at demo scale).
+**Status:** Accepted; first version built (November 2026). **Decision:** SQLite locally, managed Postgres in production (Neon free tier, because Render's free server wipes its disk on restart), through SQLAlchemy. Every accepted replan creates a new ItineraryVersion instead of overwriting. **As built:** `backend/app/storage.py` is the only code that touches the database; four tables (trips, itinerary_versions, runs, trace_events) keep their data as JSON columns, and tables are created on first use. Alembic is added when a table's columns first need to change. **Consequences:** undo and before/after diffs become trivial; storage grows slowly (acceptable at demo scale).
 
 ### ADR-006: Polling for run progress in MVP
 
