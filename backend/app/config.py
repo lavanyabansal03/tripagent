@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Backup LLM (NVIDIA Nemotron) for when Gemini is busy or failing. Optional.
     # Model names change; check build.nvidia.com and override in .env if needed.
     NVIDIA_API_KEY: str = ""
-    NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
+    NVIDIA_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     # Which LLM to try first: "gemini" (default) or "nvidia". The other is the backup.
     LLM_PRIMARY: Literal["gemini", "nvidia"] = "gemini"
     MAPBOX_SECRET_TOKEN: str = ""
