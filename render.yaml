@@ -65,13 +65,11 @@ services:
       # status and the "Demo mode" note/badge disappear.
       - key: VITE_DEMO_MODE
         value: "true"
-      # Resolved to the API service's host (e.g. tripagent-api-xxx.onrender.com).
-      # The client adds https:// when the scheme is missing.
+      # The API's PUBLIC address. Not `fromService: property: host`: Render gives only the
+      # private-network name there (no .onrender.com), which browsers cannot reach, so the
+      # site showed "Backend offline". Change it here if the API service is renamed.
       - key: VITE_API_BASE
-        fromService:
-          type: web
-          name: tripagent-api-lavanyabansal03
-          property: host
+        value: https://tripagent-api-lavanyabansal03.onrender.com
       # Public, URL-restricted Mapbox token (safe to expose). Optional.
       - key: VITE_MAPBOX_PUBLIC_TOKEN
         sync: false
