@@ -1,7 +1,7 @@
 """Trip intake, clarification, planning, and trace API endpoints."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.agents.preferences import extract_preferences
 from app.graph.trip_planner import build_trip_graph
+from app.models.trip_requirements import TripRequirements
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 runs_router = APIRouter(prefix="/runs", tags=["runs"])
@@ -24,17 +25,25 @@ class TripRequest(BaseModel):
     interests: list[str] = Field(default_factory=list)
     start_date: str | None = None
     end_date: str | None = None
-    budget: float | None = None
-    budget_strictness: Literal["strict", "flexible"] = "strict"
+    budget_min: float | None = Field(default=None, ge=0)
+    budget_max: float | None = Field(default=None, ge=0)
+    budget_level: Literal["cheap", "moderate", "expensive"] | None = None
+    budget_strictness: Literal["strict", "flexible", "none"] = "flexible"
     mode: Literal["walking", "transit", "driving", "cycling"] = "transit"
     pace: Literal["relaxed", "moderate", "packed"] = "moderate"
-    max_travel_min: int = Field(default=30, ge=1)
+    max_travel_min: int = Field(default=30, ge=0)
     avoid: list[str] = Field(default_factory=list)
     tourist_local_ratio: int = Field(default=50, ge=0, le=100)
     free_text: str = ""
 
     @model_validator(mode="after")
     def validate_trip_dates(self) -> "TripRequest":
+        if (
+            self.budget_min is not None
+            and self.budget_max is not None
+            and self.budget_min > self.budget_max
+        ):
+            raise ValueError("Minimum budget cannot exceed maximum budget")
         if self.start_date or self.end_date:
             try:
                 start = datetime.fromisoformat(self.start_date).date() if self.start_date else None
@@ -56,32 +65,6 @@ class Trip(BaseModel):
     status: Literal["draft", "planning", "planned", "adapting", "infeasible", "error"]
     current_version: int
     created_at: str
-
-
-class TripRequirements(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    trip_id: str
-    version: int = 1
-    destination: str
-    start_date: str
-    end_date: str
-    budget: float | None = None
-    budget_strictness: Literal["strict", "flexible"] = "strict"
-    mode: Literal["walking", "transit", "driving", "cycling"] = "transit"
-    pace: Literal["relaxed", "moderate", "packed"] = "moderate"
-    interests: list[str] = Field(default_factory=list)
-    avoid: list[str] = Field(default_factory=list)
-    tourist_local_ratio: int = 50
-    max_travel_min: int = 30
-    daily_start: str = "09:00"
-    daily_end: str = "20:00"
-    dietary: list[str] = Field(default_factory=list)
-    accessibility: list[str] = Field(default_factory=list)
-    free_text: str = ""
-    provenance: dict[str, Literal["explicit", "inferred", "default"]] = Field(
-        default_factory=dict
-    )
 
 
 class Question(BaseModel):
@@ -162,7 +145,7 @@ def _get_requirements(trip_id: str) -> TripRequirements:
     return requirements
 
 
-def _questions_for(start_date: str | None, end_date: str | None) -> list[Question]:
+def _questions_for(start_date: str | date | None, end_date: str | date | None) -> list[Question]:
     questions = []
     if not start_date:
         questions.append(
@@ -184,26 +167,44 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
 
     extracted_interests: list[str] = []
     extracted_avoid: list[str] = []
+    extracted_budget_min: float | None = None
+    extracted_budget_max: float | None = None
+    extracted_budget_level: str | None = None
     extracted_max_travel_min: int | None = None
     if request.free_text.strip():
         try:
             preferences = extract_preferences(request.free_text)
-            extracted_interests = preferences.interests
-            extracted_avoid = preferences.avoid
-            extracted_max_travel_min = preferences.max_travel_minutes
+            if preferences is not None:
+                extracted_interests = preferences.interests
+                extracted_avoid = preferences.avoid
+                extracted_budget_min = preferences.budget_min
+                extracted_budget_max = preferences.budget_max
+                extracted_budget_level = preferences.budget_level
+                extracted_max_travel_min = preferences.max_travel_min
         except Exception:
             # Preference extraction is an enhancement; trip creation must still work.
             logger.warning("Preference extraction failed; using form values and defaults")
 
     interests = list(dict.fromkeys([*request.interests, *extracted_interests]))
     avoid = list(dict.fromkeys([*request.avoid, *extracted_avoid]))
+    budget_min = request.budget_min
+    if budget_min is None:
+        budget_min = extracted_budget_min
+    budget_max = request.budget_max
+    if budget_max is None:
+        budget_max = extracted_budget_max
+    budget_level = request.budget_level
+    if budget_level is None:
+        budget_level = extracted_budget_level
     max_travel_min = request.max_travel_min
+    max_travel_min_inferred = False
     if (
         extracted_max_travel_min is not None
         and "max_travel_min" not in request.model_fields_set
-        and extracted_max_travel_min >= 1
+        and extracted_max_travel_min >= 0
     ):
         max_travel_min = extracted_max_travel_min
+        max_travel_min_inferred = True
 
     trip = Trip(
         id=trip_id,
@@ -221,25 +222,48 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
         "mode": "explicit",
         "pace": "explicit",
     }
-    if extracted_interests and not request.interests:
+    if any(value not in request.interests for value in extracted_interests):
         provenance["interests"] = "inferred"
-    if extracted_avoid and not request.avoid:
+    if any(value not in request.avoid for value in extracted_avoid):
         provenance["avoid"] = "inferred"
-    if max_travel_min != request.max_travel_min:
+    if (
+        budget_min == extracted_budget_min
+        and extracted_budget_min is not None
+        and request.budget_min is None
+    ):
+        provenance["budget_min"] = "inferred"
+    if (
+        budget_max == extracted_budget_max
+        and extracted_budget_max is not None
+        and request.budget_max is None
+    ):
+        provenance["budget_max"] = "inferred"
+    if (
+        budget_level == extracted_budget_level
+        and extracted_budget_level is not None
+        and request.budget_level is None
+    ):
+        provenance["budget_level"] = "inferred"
+    if max_travel_min_inferred:
         provenance["max_travel_min"] = "inferred"
     requirements = TripRequirements(
         trip_id=trip_id,
+        version=1,
         destination=request.destination,
-        start_date=start_date,
-        end_date=end_date,
-        budget=request.budget,
+        start_date=datetime.fromisoformat(start_date).date() if start_date else None,
+        end_date=datetime.fromisoformat(end_date).date() if end_date else None,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        budget_level=budget_level,
         budget_strictness=request.budget_strictness,
         mode=request.mode,
         pace=request.pace,
         interests=interests,
         avoid=avoid,
-        tourist_local_ratio=request.tourist_local_ratio,
+        tourist_local_ratio=float(request.tourist_local_ratio),
         max_travel_min=max_travel_min,
+        daily_start="09:00",
+        daily_end="20:00",
         free_text=request.free_text,
         provenance=provenance,
     )
@@ -265,8 +289,12 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
         if answer:
             updates[question.field] = answer
 
-    candidate_start = updates.get("start_date", requirements.start_date)
-    candidate_end = updates.get("end_date", requirements.end_date)
+    candidate_start = updates.get(
+        "start_date", requirements.start_date.isoformat() if requirements.start_date else ""
+    )
+    candidate_end = updates.get(
+        "end_date", requirements.end_date.isoformat() if requirements.end_date else ""
+    )
     if candidate_start or candidate_end:
         try:
             start = datetime.fromisoformat(candidate_start).date() if candidate_start else None
@@ -278,7 +306,13 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
         if start is not None and end is not None and end < start:
             raise HTTPException(status_code=422, detail="End date cannot be before start date")
 
-    requirements = requirements.model_copy(update=updates)
+    requirements_updates = {
+        key: datetime.fromisoformat(value).date()
+        if key in {"start_date", "end_date"}
+        else value
+        for key, value in updates.items()
+    }
+    requirements = requirements.model_copy(update=requirements_updates)
     trip = trip.model_copy(update=updates)
     remaining = _questions_for(requirements.start_date, requirements.end_date)
     if remaining:
@@ -312,7 +346,7 @@ def plan_trip(trip_id: str) -> PlanResponse:
     run_id = str(uuid4())
     started_at = datetime.now(UTC).isoformat()
     _trips[trip_id] = trip.model_copy(update={"status": "planning"})
-    graph_trip = requirements.model_dump()
+    graph_trip = requirements.model_dump(mode="json")
     graph_trip["trip_id"] = trip_id
     result = trip_graph.invoke(
         {"trip": graph_trip, "logs": [], "run_id": run_id},

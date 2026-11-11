@@ -147,8 +147,8 @@ def plan_and_validate(
         check_overlap(all_activities, trip_id, version),
         check_budget(
             all_activities,
-            trip.get("budget"),
-            trip.get("budget_strictness", "strict"),
+            trip.get("budget_max"),
+            trip.get("budget_strictness", "flexible"),
             trip_id,
             version,
         ),

@@ -1,8 +1,9 @@
 import time
+from typing import Literal
 
 from google import genai
 from google.genai import errors
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
 
@@ -10,8 +11,20 @@ from app.config import settings
 class Preferences(BaseModel):
     interests: list[str] = Field(default_factory=list)
     avoid: list[str] = Field(default_factory=list)
-    budget: str | None = None
-    max_travel_minutes: int | None = None
+    budget_min: float | None = Field(default=None, ge=0)
+    budget_max: float | None = Field(default=None, ge=0)
+    budget_level: Literal["cheap", "moderate", "expensive"] | None = None
+    max_travel_min: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_budget_range(self) -> "Preferences":
+        if (
+            self.budget_min is not None
+            and self.budget_max is not None
+            and self.budget_min > self.budget_max
+        ):
+            raise ValueError("Minimum budget cannot exceed maximum budget")
+        return self
 
 
 def extract_preferences(trip_description: str) -> Preferences:
@@ -23,7 +36,7 @@ def extract_preferences(trip_description: str) -> Preferences:
     prompt = f"""
 You are a travel preference extraction assistant.
 
-Read the user's trip description and extract exactly these four things:
+Read the user's trip description and extract exactly these six things:
 
 1. interests — specific activities, attractions, foods, or experiences
    the traveler wants. Use concise category names instead of copying
@@ -39,8 +52,10 @@ Read the user's trip description and extract exactly these four things:
    clearly identifies them as something they want to do.
 
 2. avoid — specific things the traveler does not like or wants to avoid
-3. budget — use "cheap", "moderate", or "expensive"
-4. max_travel_minutes — the maximum number of minutes the traveler
+3. budget_min — the minimum total trip budget, as a number, if stated
+4. budget_max — the maximum total trip budget, as a number, if stated
+5. budget_level — use "cheap", "moderate", or "expensive" if stated
+6. max_travel_min — the maximum number of minutes the traveler
    wants to travel between activities
 
 Only extract information that is actually stated or clearly implied.

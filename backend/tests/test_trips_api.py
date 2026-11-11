@@ -128,7 +128,10 @@ def test_create_trip_merges_extracted_preferences_without_overwriting_form_value
         lambda _text: Preferences(
             interests=["coffee", "art"],
             avoid=["nightclubs", "bars"],
-            max_travel_minutes=20,
+            budget_min=50,
+            budget_max=200,
+            budget_level="moderate",
+            max_travel_min=20,
         ),
     )
 
@@ -139,7 +142,9 @@ def test_create_trip_merges_extracted_preferences_without_overwriting_form_value
             "interests": ["art", "museums"],
             "avoid": ["bars"],
             "max_travel_min": 25,
-            "budget": 150,
+            "budget_min": 100,
+            "budget_max": 250,
+            "budget_level": "expensive",
             "free_text": "We love coffee and galleries.",
         },
     )
@@ -149,7 +154,9 @@ def test_create_trip_merges_extracted_preferences_without_overwriting_form_value
     assert requirements["interests"] == ["art", "museums", "coffee"]
     assert requirements["avoid"] == ["bars", "nightclubs"]
     assert requirements["max_travel_min"] == 25
-    assert requirements["budget"] == 150
+    assert requirements["budget_min"] == 100
+    assert requirements["budget_max"] == 250
+    assert requirements["budget_level"] == "expensive"
 
 
 def test_create_trip_uses_extracted_preferences_when_form_values_are_omitted(monkeypatch):
@@ -157,7 +164,12 @@ def test_create_trip_uses_extracted_preferences_when_form_values_are_omitted(mon
         trips_api,
         "extract_preferences",
         lambda _text: Preferences(
-            interests=["coffee"], avoid=["crowds"], max_travel_minutes=18
+            interests=["coffee"],
+            avoid=["crowds"],
+            budget_min=40,
+            budget_max=120,
+            budget_level="cheap",
+            max_travel_min=18,
         ),
     )
 
@@ -171,9 +183,34 @@ def test_create_trip_uses_extracted_preferences_when_form_values_are_omitted(mon
     assert requirements["interests"] == ["coffee"]
     assert requirements["avoid"] == ["crowds"]
     assert requirements["max_travel_min"] == 18
+    assert requirements["budget_min"] == 40
+    assert requirements["budget_max"] == 120
+    assert requirements["budget_level"] == "cheap"
     assert requirements["provenance"]["interests"] == "inferred"
     assert requirements["provenance"]["avoid"] == "inferred"
     assert requirements["provenance"]["max_travel_min"] == "inferred"
+    assert requirements["provenance"]["budget_min"] == "inferred"
+    assert requirements["provenance"]["budget_max"] == "inferred"
+    assert requirements["provenance"]["budget_level"] == "inferred"
+
+
+def test_create_trip_continues_when_preference_extraction_returns_none(monkeypatch):
+    monkeypatch.setattr(trips_api, "extract_preferences", lambda _text: None)
+    response = client.post(
+        "/api/trips",
+        json={
+            "destination": "Seattle",
+            "interests": ["parks"],
+            "budget_max": 300,
+            "free_text": "A relaxed trip.",
+        },
+    )
+
+    assert response.status_code == 201
+    requirements = response.json()["requirements"]
+    assert requirements["interests"] == ["parks"]
+    assert requirements["budget_max"] == 300
+    assert requirements["max_travel_min"] == 30
 
 
 def test_create_trip_continues_when_preference_extraction_fails(monkeypatch):

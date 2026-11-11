@@ -114,11 +114,17 @@ def same_items(got: list[str], expected: list[str]) -> bool:
 def check_example(result, expected) -> list[str]:
     """Return the list of mistakes for one example (empty means correct)."""
     mistakes = []
-    if result.budget != expected["budget"]:
-        mistakes.append(f"budget: got {result.budget!r}, expected {expected['budget']!r}")
-    want_minutes = expected["max_travel_minutes"]
-    if result.max_travel_minutes != want_minutes:
-        mistakes.append(f"travel time: got {result.max_travel_minutes}, expected {want_minutes}")
+    if result.budget_level != expected["budget_level"]:
+        mistakes.append(
+            f"budget level: got {result.budget_level!r}, expected {expected['budget_level']!r}"
+        )
+    for field in ("budget_min", "budget_max"):
+        got = getattr(result, field)
+        if got != expected[field]:
+            mistakes.append(f"{field}: got {got!r}, expected {expected[field]!r}")
+    want_minutes = expected["max_travel_min"]
+    if result.max_travel_min != want_minutes:
+        mistakes.append(f"travel time: got {result.max_travel_min}, expected {want_minutes}")
     for field in ("interests", "avoid"):
         got = getattr(result, field)
         if not same_items(got, expected[field]):
