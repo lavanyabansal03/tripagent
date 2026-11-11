@@ -1,0 +1,46 @@
+{
+ "code": "Ok",
+ "waypoints": [
+  {
+   "location": [
+    -122.342195,
+    47.60973
+   ],
+   "name": "",
+   "distance": 3.361
+  },
+  {
+   "location": [
+    -122.349314,
+    47.620336
+   ],
+   "name": "",
+   "distance": 18.287
+  }
+ ],
+ "routes": [
+  {
+   "distance": 1692.473,
+   "duration": 1251.813,
+   "weight": 1424.947,
+   "weight_name": "pedestrian",
+   "legs": [
+    {
+     "steps": [],
+     "summary": "Western Avenue, Vine Street",
+     "distance": 1692.473,
+     "duration": 1251.813,
+     "weight": 1424.947,
+     "admins": [
+      {
+       "iso_3166_1": "US",
+       "iso_3166_1_alpha3": "USA"
+      }
+     ],
+     "via_waypoints": []
+    }
+   ]
+  }
+ ],
+ "uuid": "so6FGvf7aTAjLN1my6Fl3Zhkv-LiCujbjXOscizRbYC1Bg74FuzkHQ=="
+}

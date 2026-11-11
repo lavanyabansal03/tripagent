@@ -45,6 +45,8 @@ services:
         sync: false
       - key: FOURSQUARE_API_KEY
         sync: false
+      - key: GEOAPIFY_API_KEY
+        sync: false
 
   - type: web
     name: tripagent-web-lavanyabansal03
