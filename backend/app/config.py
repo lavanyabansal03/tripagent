@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.8-flash"
     MAPBOX_SECRET_TOKEN: str = ""
     FOURSQUARE_API_KEY: str = ""
+    # Place search (free plan, no card). Used only when DEMO_MODE is false.
+    GEOAPIFY_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./tripagent.db"
     DEMO_MODE: bool = True
     # Comma-separated browser origins allowed to call the API. Use "*" to allow

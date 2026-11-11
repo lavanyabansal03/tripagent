@@ -9,13 +9,15 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models.place import OpeningPeriod
+
 ExperienceType = Literal[
     "food", "cafe", "nature", "culture", "shopping", "nightlife", "event", "landmark"
 ]
 CostBasis = Literal["known", "price_level", "free", "unknown"]
 LocalSignal = Literal["tourist", "local", "hidden", "unknown"]
 Provenance = Literal["explicit", "inferred", "default"]
-Source = Literal["mapbox", "foursquare", "seed"]
+Source = Literal["mapbox", "foursquare", "geoapify", "seed"]
 
 
 class Place(BaseModel):
@@ -34,7 +36,8 @@ class Place(BaseModel):
     est_cost_low: float | None = Field(default=None, ge=0)
     est_cost_high: float | None = Field(default=None, ge=0)
     cost_basis: CostBasis = "unknown"
-    hours: str | None = None
+    # Same structured hours as app/models/place.py, so the opening-hours check can read them.
+    hours: list[OpeningPeriod] | None = None
     rating: float | None = None
     review_count: int | None = Field(default=None, ge=0)
     popularity: float | None = None
