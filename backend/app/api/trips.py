@@ -8,7 +8,8 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.agents.preferences import Preferences, extract_preferences
+from app.agents.preferences import Preferences
+from app.agents.preferences_reader import read_preferences
 from app.graph.trip_planner import build_trip_graph
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -208,7 +209,7 @@ def _read_note(free_text: str) -> Preferences:
     if not free_text.strip():
         return Preferences()
     try:
-        return extract_preferences(free_text) or Preferences()
+        return read_preferences(free_text) or Preferences()
     except Exception:
         logger.warning("Could not read the trip note; using form values only", exc_info=True)
         return Preferences()

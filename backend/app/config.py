@@ -4,6 +4,7 @@ Every key is optional so the app can start with no API keys set.
 """
 
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
@@ -21,6 +22,9 @@ MAX_BACKUP_SEARCHES = 15
 
 # Longest wait for one Gemini answer before giving up (each retry gets its own limit).
 GEMINI_TIMEOUT_SECONDS = 20
+# Same idea for the NVIDIA backup LLM.
+NVIDIA_TIMEOUT_SECONDS = 20
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 # The .env file lives at the repo root (one level above backend/).
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -29,6 +33,12 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.8-flash"
+    # Backup LLM (NVIDIA Nemotron) for when Gemini is busy or failing. Optional.
+    # Model names change; check build.nvidia.com and override in .env if needed.
+    NVIDIA_API_KEY: str = ""
+    NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
+    # Which LLM to try first: "gemini" (default) or "nvidia". The other is the backup.
+    LLM_PRIMARY: Literal["gemini", "nvidia"] = "gemini"
     MAPBOX_SECRET_TOKEN: str = ""
     FOURSQUARE_API_KEY: str = ""
     # Place search (free plan, no card). Used only when DEMO_MODE is false.
