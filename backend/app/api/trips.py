@@ -352,23 +352,32 @@ def plan_trip(trip_id: str) -> PlanResponse:
         {"trip": graph_trip, "logs": [], "run_id": run_id},
         {"configurable": {"thread_id": trip_id}},
     )
-    succeeded = result.get("status") == "completed"
-    status: Literal["done", "failed"] = "done" if succeeded else "failed"
+    succeeded = result.get("status") in ("completed", "infeasible")
+    run_status: Literal["done", "failed", "infeasible"] = (
+        "infeasible"
+        if result.get("terminal") == "INFEASIBLE"
+        else "done"
+        if succeeded
+        else "failed"
+    )
     _runs[run_id] = RunStatus(
         run_id=run_id,
         trip_id=trip_id,
-        status=status,
+        status=run_status,
         phase="done",
-        step="completed" if succeeded else "failed",
+        step=run_status,
         step_index=5,
         step_count=5,
-        terminal="PASS" if succeeded else "ERROR",
-        message=result.get("explanation"),
+        terminal=result.get("terminal") or ("PASS" if succeeded else "ERROR"),
+        message=result.get("explanation") or None,
         started_at=started_at,
     )
     if succeeded:
         _trips[trip_id] = _trips[trip_id].model_copy(
-            update={"status": "planned", "current_version": 1}
+            update={
+                "status": "infeasible" if run_status == "infeasible" else "planned",
+                "current_version": 1,
+            }
         )
         _itineraries[trip_id] = result.get("itinerary", {})
     else:
