@@ -9,6 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from app.agents.backup import attach_backups
 from app.agents.discovery import discover_places
 from app.agents.planner import build_plan_with_repairs
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
@@ -212,6 +213,24 @@ def build_trip_graph(
                 "Replaced or rearranged activities and reran validation",
                 iteration=iteration,
                 event_type="loop",
+            )
+        # A4: store up to two backups on each important activity. A failure here
+        # only means no backups; the plan itself is still good.
+        try:
+            backup_count = attach_backups(itinerary, state.get("trip", {}))
+            logs = _log(
+                {**state, "logs": logs},
+                "backup",
+                f"Found {backup_count} backups",
+                event_type="tool",
+            )
+        except Exception as error:
+            logs = _log(
+                {**state, "logs": logs},
+                "backup",
+                "Backup search failed; the plan has no backups",
+                event_type="tool",
+                error=str(error),
             )
         validation_logs = _log(
             {**state, "logs": logs},

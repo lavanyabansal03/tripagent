@@ -15,11 +15,15 @@
   let expanded = $state(false)
   const backups = $derived(activity.backups ?? [])
 
+  // Live backups carry their own place; demo backups are looked up in the fixtures.
+  function placeOf(placeId: string) {
+    return backups.find((b) => b.place_id === placeId)?.place ?? placesById.get(placeId)
+  }
   function placeName(placeId: string): string {
-    return placesById.get(placeId)?.name ?? placeId
+    return placeOf(placeId)?.name ?? placeId
   }
   function placeCost(placeId: string): string {
-    const p = placesById.get(placeId)
+    const p = placeOf(placeId)
     if (!p) return t('validation.unknownCost')
     return formatCost(p.est_cost_high ?? p.est_cost_low ?? null, p.est_cost_low, p.est_cost_high, p.cost_basis)
   }
@@ -53,8 +57,11 @@
                 <Icon name="check" size={12} />
                 {Math.round(backup.purpose_similarity * 100)}% {t('change.kept')}
               </span>
-              {#if backup.cost_delta < 0}
+              {#if backup.cost_delta != null && backup.cost_delta < 0}
                 <span class="cheaper">{formatCost(backup.cost_delta, null, null, 'known')}</span>
+              {/if}
+              {#if backup.unknown?.includes('hours')}
+                <span class="unknown-hours">{t('validation.unknownHours')}</span>
               {/if}
               <button
                 type="button"
@@ -146,6 +153,10 @@
   .cheaper {
     font-size: var(--text-xs);
     color: var(--color-success);
+  }
+  .unknown-hours {
+    font-size: var(--text-xs);
+    color: var(--color-warning);
   }
   .swap {
     border: 1px solid var(--color-brand);

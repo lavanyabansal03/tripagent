@@ -53,9 +53,10 @@ def test_trip_create_clarify_plan_and_trace_follow_svelte_contract():
     assert trace.status_code == 200
     events = trace.json()
     assert [event["node"] for event in events] == [
-        "read", "find", "planner", "validator", "save"
+        "read", "find", "planner", "backup", "validator", "save"
     ]
     assert next(event for event in events if event["node"] == "validator")["type"] == "validation"
+    assert next(event for event in events if event["node"] == "backup")["type"] == "tool"
     assert all(
         {"node", "type", "iteration", "status", "duration_ms"} <= event.keys()
         for event in events
