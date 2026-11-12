@@ -214,3 +214,14 @@ def test_message_names_the_places_not_their_ids():
 
     assert result.message.startswith("Central Park to The Metropolitan Museum of Art: ")
     assert result.activity_ids == ["A", "B"]  # the ids are still there for the app
+
+
+def test_overnight_is_not_a_trip_between_stops():
+    # Seen live: "Takahachi Bakery to Queens Botanical Garden: 62.2 minutes estimated" for
+    # the last stop of day 1 and the first stop of day 2.
+    last_of_day_1 = make_activity("A", "2026-11-14T16:30:00", "2026-11-14T18:00:00", 40.71, -74.0)
+    first_of_day_2 = make_activity("B", "2026-11-15T09:00:00", "2026-11-15T10:15:00", 40.75, -73.83)
+
+    result = check_travel_time([last_of_day_1, first_of_day_2], "walking", max_travel_min=45)
+
+    assert result.passed is True

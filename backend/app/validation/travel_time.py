@@ -51,6 +51,14 @@ def check_travel_time(
             if activity_id is not None
         ]
 
+        # Only stops on the same day are a trip between them: the last stop of day 1
+        # and the first of day 2 have a night in between (seen live: "62 minutes").
+        if (
+            datetime.fromisoformat(first["end"]).date()
+            != datetime.fromisoformat(second["start"]).date()
+        ):
+            continue
+
         first_place = first.get("place") or {}
         second_place = second.get("place") or {}
 
