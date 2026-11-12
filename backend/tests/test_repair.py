@@ -55,6 +55,7 @@ def trip(**overrides):
         "budget": None,
         "budget_strictness": "strict",
         "avoid": [],
+        "pace": "relaxed",  # 3 stops a day, so one place is left as a spare for repair
         **overrides,
     }
 

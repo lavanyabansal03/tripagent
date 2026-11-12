@@ -84,6 +84,31 @@ def test_places_are_clustered_by_geographic_area():
     assert max(second_day_lats) - min(second_day_lats) < 0.01
 
 
+def many_places(count):
+    # Close together, so every stop can fit in the 09:00-20:00 day.
+    return [
+        make_place(f"p{i}", f"Place {i}", 47.60 + i * 0.001, -122.33, experience=kind)
+        for i, kind in zip(range(count), ["nature", "culture", "food"] * count, strict=False)
+    ]
+
+
+def test_pace_decides_how_many_stops_a_day_gets():
+    # Before, every day had at most 3 stops whatever the pace (seen live: days ending at 2 PM).
+    trip = make_trip(end_date="2026-11-10")  # two days
+    counts = {}
+    for pace in ("relaxed", "moderate", "packed"):
+        itinerary, _ = plan_and_validate({**trip, "pace": pace}, many_places(20))
+        counts[pace] = [len(day["activities"]) for day in itinerary["days"]]
+
+    assert counts == {"relaxed": [3, 3], "moderate": [4, 4], "packed": [6, 6]}
+
+
+def test_unknown_pace_uses_moderate():
+    itinerary, _ = plan_and_validate(make_trip(pace=None), many_places(10))
+
+    assert len(itinerary["days"][0]["activities"]) == 4
+
+
 def test_plan_repair_swaps_closed_place_for_available_candidate():
     closed_monday = [{"day": "sunday", "open": "12:00", "close": "13:00"}]
     places = [

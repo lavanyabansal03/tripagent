@@ -25,6 +25,9 @@ MAX_DISCOVERY_CALLS = 8
 # Countries TripAgent plans trips in (ISO codes, lower case). USA only for now;
 # add codes here to allow more countries.
 ALLOWED_COUNTRIES = ["us"]
+# Planner: most stops in one day for each pace (the 09:00-20:00 day still decides
+# whether they all fit).
+STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 6}
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15

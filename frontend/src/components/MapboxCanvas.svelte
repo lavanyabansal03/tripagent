@@ -42,6 +42,9 @@
       center: startCenter(),
       zoom: 12,
       attributionControl: true,
+      // The mouse wheel scrolls the page; Ctrl + wheel (two fingers on phones) moves the map.
+      // Without this, scrolling over the big map zoomed it and the plan seemed stuck.
+      cooperativeGestures: true,
     })
     map = instance
     // Keep the map the size of its box when the page layout changes.

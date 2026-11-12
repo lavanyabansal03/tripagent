@@ -7,7 +7,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.agents.repair import hard_failures, repair_itinerary, violation_score
-from app.config import MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS
+from app.config import MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS, STOPS_PER_DAY
 from app.models.validation_result import ValidationResult
 from app.tools.base import LatLng, Mode
 from app.tools.mock_places import distance_km, rough_minutes
@@ -69,11 +69,14 @@ def _duration(place: dict[str, Any]) -> int:
 
 
 def _schedule_days(
-    places: list[dict[str, Any]], day_count: int, repair_iteration: int = 0
+    places: list[dict[str, Any]],
+    day_count: int,
+    repair_iteration: int = 0,
+    stops_per_day: int = STOPS_PER_DAY["moderate"],
 ) -> list[list[dict[str, Any]]]:
     """Cluster places by geographic proximity, then nearest-neighbour order each day."""
     buckets: list[list[dict[str, Any]]] = [[] for _ in range(day_count)]
-    candidates = places[: day_count * 3]
+    candidates = places[: day_count * stops_per_day]
     if not candidates:
         return buckets
 
@@ -308,7 +311,9 @@ def plan_and_validate(
     daily_end = _as_time(trip.get("daily_end", "20:00"), time(20, 0))
     destination_timezone = _trip_timezone(trip)
     mode: Mode = trip.get("mode", "walking")
-    buckets = _schedule_days(places, day_count, repair_iteration)
+    # The traveller's pace decides how many stops a day gets (it was always 3 before).
+    stops_per_day = STOPS_PER_DAY.get(str(trip.get("pace")), STOPS_PER_DAY["moderate"])
+    buckets = _schedule_days(places, day_count, repair_iteration, stops_per_day)
     days: list[dict[str, Any]] = []
     all_activities: list[dict[str, Any]] = []
     unscheduled_places: list[str] = []
