@@ -202,3 +202,15 @@ def test_missing_location_with_known_violation():
     assert result.passed is False
     assert result.severity == "hard"
     assert "Coordinates missing" in result.message
+
+
+def test_message_names_the_places_not_their_ids():
+    # Seen on the live site: "9d9121f2-... to 56d0dc51-...: 33.0 minutes estimated".
+    activities = sample_activities(gap_minutes=60)
+    activities[0]["place"]["name"] = "Central Park"
+    activities[1]["place"]["name"] = "The Metropolitan Museum of Art"
+
+    result = check_travel_time(activities, "walking", max_travel_min=10)
+
+    assert result.message.startswith("Central Park to The Metropolitan Museum of Art: ")
+    assert result.activity_ids == ["A", "B"]  # the ids are still there for the app
