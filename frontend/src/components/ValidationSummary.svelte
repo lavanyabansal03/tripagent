@@ -46,7 +46,8 @@
   {#if allGood && showPass}
     <p class="line pass">
       <Icon name="check" size={16} />
-      <span>{t('validation.pass')}</span>
+      <!-- Do not claim hours or budget fit when some of them could not be checked. -->
+      <span>{gaps.length ? t('validation.passWithGaps') : t('validation.pass')}</span>
     </p>
   {/if}
 

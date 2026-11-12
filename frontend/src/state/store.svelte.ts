@@ -37,6 +37,8 @@ const initial = {
   activeDay: 1,
   showChangeSummary: false,
   questionCount: 0,
+  // The last trip form, so "Edit trip details" can bring it back filled in.
+  lastForm: null as TripFormInput | null,
 }
 
 const state = $state({ ...initial })
@@ -102,9 +104,20 @@ export const store = {
     Object.assign(state, initial)
   },
 
+  get lastForm() {
+    return state.lastForm
+  },
+
+  /** Back to the form with the traveller's last answers ("Edit trip details"). */
+  editTrip() {
+    state.error = null
+    state.route = { name: 'setup' }
+  },
+
   async createTrip(input: TripFormInput) {
     state.busy = true
     state.error = null
+    state.lastForm = { ...input, interests: [...input.interests], avoid: [...input.avoid] }
     try {
       const { trip, requirements } = await api.createTrip(input)
       state.trip = trip

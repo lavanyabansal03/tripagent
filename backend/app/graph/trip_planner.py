@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any, TypedDict
 from uuid import uuid4
 
@@ -45,9 +46,15 @@ class TripState(TypedDict, total=False):
 SEATTLE = LatLng(lat=KNOWN_CITIES['seattle'][0], lng=KNOWN_CITIES['seattle'][1])
 
 
+def _ms_since(start: float) -> int:
+    """Milliseconds since `start` (a perf_counter() value), for the Agent trace."""
+    return int((perf_counter() - start) * 1000)
+
+
 def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict[str, Any]]:
     trip = state.get("trip", {})
     event_type = details.pop("event_type", "node")
+    duration_ms = max(0, int(details.pop("duration_ms", 0)))
     entry = {
         "id": str(uuid4()),
         "trip_id": trip.get("trip_id", trip.get("id", "")),
@@ -56,7 +63,7 @@ def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict
         "type": event_type,
         "iteration": details.get("attempt", details.get("iteration", 1)),
         "status": "failed" if "error" in details or step == "stop" else "ok",
-        "duration_ms": 0,
+        "duration_ms": duration_ms,
         "metadata": {"message": message, **details},
         "ts": datetime.now(UTC).isoformat(),
     }
@@ -64,6 +71,7 @@ def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict
 
 
 def _read_trip(state: TripState) -> dict[str, Any]:
+    started = perf_counter()
     trip = dict(state.get("trip", {}))
     trip.setdefault("destination", "")
     trip.setdefault("interests", [])
@@ -81,7 +89,7 @@ def _read_trip(state: TripState) -> dict[str, Any]:
     return {
         "trip": trip,
         "status": "running",
-        "logs": _log(state, "read", message),
+        "logs": _log(state, "read", message, duration_ms=_ms_since(started)),
     }
 
 
@@ -164,7 +172,9 @@ def _search_places(trip: dict[str, Any]) -> list[dict[str, Any]]:
     return _discover(trip)[0]
 
 
-def _discover(trip: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+def _discover(
+    trip: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, list[str]], int]:
     """Like _search_places, plus the LLM's search words for the Agent trace (A2)."""
     center = trip.get("center")
     if center is None:
@@ -182,20 +192,34 @@ def _discover(trip: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, lis
             "Demo mode only has places in Seattle. Plan a Seattle trip, or turn on live "
             "mode (DEMO_MODE=false with a Geoapify key) for other cities."
         )
-    result = discover_places(trip, search=search, plan=plan_with_llm, near=near)
+    plan_ms = [0]
+
+    def timed_plan(trip: dict[str, Any], interests: list[str]) -> dict[str, list[str]]:
+        started = perf_counter()
+        try:
+            return plan_with_llm(trip, interests)
+        finally:
+            plan_ms[0] = _ms_since(started)
+
+    result = discover_places(trip, search=search, plan=timed_plan, near=near)
     if result.status == "ERROR":
         raise RuntimeError(result.reason)  # find_places retries, then explains the failure
-    return [place.model_dump(mode="json") for place in result.places], result.search_words
+    places = [place.model_dump(mode="json") for place in result.places]
+    return places, result.search_words, plan_ms[0]
 
 
 def _find_places(
     state: TripState, search: Callable[[dict[str, Any]], list[dict[str, Any]]]
 ) -> dict[str, Any]:
     attempt = state.get("find_attempts", 0) + 1
+    started = perf_counter()
     try:
         found = search(state.get("trip", {}))
-        # A search may also return the LLM's search words: (places, {interest: words}).
-        places, search_words = found if isinstance(found, tuple) else (found, {})
+        # A search may also return the LLM's search words and how long the LLM took:
+        # (places, {interest: words}) or (places, {interest: words}, plan_ms).
+        if not isinstance(found, tuple):
+            found = (found, {}, 0)
+        places, search_words, plan_ms = (*found, 0)[:3]
         logs = state.get("logs", [])
         if search_words:
             logs = _log(
@@ -204,13 +228,18 @@ def _find_places(
                 f"LLM chose search words for {len(search_words)} interest(s)",
                 event_type="llm",
                 search_words=search_words,
+                duration_ms=plan_ms,
             )
         return {
             "places": places,
             "find_attempts": attempt,
             "find_error": "",
             "logs": _log(
-                {**state, "logs": logs}, "find", f"Found {len(places)} places", attempt=attempt
+                {**state, "logs": logs},
+                "find",
+                f"Found {len(places)} places",
+                attempt=attempt,
+                duration_ms=_ms_since(started) - plan_ms,
             ),
         }
     except Exception as error:  # Keep transient tool failures inside the bounded graph loop.
@@ -257,24 +286,37 @@ def build_trip_graph(
 
     def plan_node(state: TripState) -> dict[str, Any]:
         trip = state.get("trip", {})
+        started = perf_counter()
         backup_counts: list[int] = []
         backup_errors: list[str] = []
+        spent = {"backup": 0, "choose": 0}  # ms, for the Agent trace
 
         def add_backups(itinerary: dict[str, Any], only_ids: set[str] | None) -> int:
             # A4 runs before Repair so Repair can try stored backups first (docs/03 5.3).
             # A failure only means no backups; the plan itself is still good.
+            step_start = perf_counter()
             try:
                 count = attach_backups(itinerary, trip, only_ids=only_ids)
             except Exception as error:
                 backup_errors.append(str(error))
                 return 0
+            finally:
+                spent["backup"] += _ms_since(step_start)
             backup_counts.append(count)
             return count
 
+        def choose(*args: Any) -> Any:
+            step_start = perf_counter()
+            try:
+                return choose_with_llm(*args)
+            finally:
+                spent["choose"] += _ms_since(step_start)
+
         itinerary, validation, repair_iterations, terminal, explanation = build_plan_with_repairs(
-            trip, state.get("places", []), add_backups=add_backups, choose=choose_with_llm
+            trip, state.get("places", []), add_backups=add_backups, choose=choose
         )
-        logs = _log(state, "planner", "Built a day-by-day itinerary")
+        planner_ms = _ms_since(started) - spent["backup"] - spent["choose"]
+        logs = _log(state, "planner", "Built a day-by-day itinerary", duration_ms=planner_ms)
         if backup_errors:
             logs = _log(
                 {**state, "logs": logs},
@@ -282,6 +324,7 @@ def build_trip_graph(
                 "Backup search failed; the plan has no backups",
                 event_type="tool",
                 error=backup_errors[-1],
+                duration_ms=spent["backup"],
             )
         else:
             logs = _log(
@@ -289,6 +332,7 @@ def build_trip_graph(
                 "backup",
                 f"Found {backup_counts[-1] if backup_counts else 0} backups",
                 event_type="tool",
+                duration_ms=spent["backup"],
             )
         for iteration in range(1, repair_iterations + 1):
             logs = _log(
@@ -307,6 +351,7 @@ def build_trip_graph(
                 f"LLM chose {len(by_llm)} of {len(choices)} replacements"
                 + ("" if len(by_llm) == len(choices) else "; code chose the rest"),
                 event_type="llm",
+                duration_ms=spent["choose"],
                 choices=[
                     {
                         "old": c["old_place"],
@@ -341,6 +386,7 @@ def build_trip_graph(
             "validation": state.get("validation", []),
         }
         attempt = state.get("save_attempts", 0) + 1
+        started = perf_counter()
         try:
             saved_trip = (save or (lambda value: value))(record)
             return {
@@ -350,7 +396,10 @@ def build_trip_graph(
                 "status": (
                     "infeasible" if state.get("terminal") == "INFEASIBLE" else "completed"
                 ),
-                "logs": _log(state, "save", "Trip plan saved", attempt=attempt),
+                "logs": _log(
+                    state, "save", "Trip plan saved", attempt=attempt,
+                    duration_ms=_ms_since(started),
+                ),
             }
         except Exception as error:  # Keep storage failures inside the bounded graph loop.
             return {

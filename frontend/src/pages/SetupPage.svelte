@@ -17,7 +17,7 @@
   />
 {/if}
 
-<TripForm onsubmit={handleSubmit} busy={store.busy} />
+<TripForm onsubmit={handleSubmit} busy={store.busy} initial={store.lastForm} />
 
 {#if store.busy}
   <p class="sr-status" role="status">{t('common.loading')}</p>

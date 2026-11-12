@@ -38,8 +38,9 @@
     const instance = new mapboxgl.Map({
       container,
       style: isDark ? MAPBOX_STYLE_DARK : MAPBOX_STYLE,
-      center: [-122.335, 47.625],
-      zoom: 11.2,
+      // Start at the trip's own stops (any city), not a fixed Seattle view.
+      center: startCenter(),
+      zoom: 12,
       attributionControl: true,
     })
     map = instance
@@ -90,6 +91,15 @@
       update()
     })
   })
+
+  /** Middle of the trip's stops; Seattle only when there are no stops yet. */
+  function startCenter(): [number, number] {
+    const places = (itinerary?.days ?? []).flatMap((d) => d.activities.map((a) => a.place))
+    if (!places.length) return [-122.335, 47.625]
+    const lng = places.reduce((sum, p) => sum + p.lng, 0) / places.length
+    const lat = places.reduce((sum, p) => sum + p.lat, 0) / places.length
+    return [lng, lat]
+  }
 
   function setData(id: string, features: Array<Record<string, unknown>>) {
     if (!map) return

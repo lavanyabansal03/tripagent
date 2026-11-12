@@ -12,6 +12,8 @@ from app import storage
 from app.agents.preferences import Preferences
 from app.agents.preferences_reader import read_preferences
 from app.graph.trip_planner import build_trip_graph
+from app.tools.geocode import locate_city
+from app.tools.parallel import run_all
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 runs_router = APIRouter(prefix="/runs", tags=["runs"])
@@ -263,7 +265,13 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
     end_date = request.end_date or ""
     now = datetime.now(UTC).isoformat()
 
-    note = _read_note(request.free_text)
+    # Read the note (LLM) and look the city up (Geoapify) at the same time. The city
+    # lookup is cached, so "Build my plan" later does not wait for it again.
+    note, _ = run_all(
+        [lambda: _read_note(request.free_text), lambda: locate_city(request.destination)]
+    )
+    if not isinstance(note, Preferences):
+        note = Preferences()
     interests = _merge_items(request.interests, note.interests)
     avoid = _merge_items(request.avoid, note.avoid)
 

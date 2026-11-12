@@ -190,6 +190,7 @@ Internal terms (replan, validator, node, agent) appear only in the Trace panel.
 | Element | Copy |
 |---|---|
 | Section title | Here's what we understood |
+| Back to the form (keeps everything entered) | Edit trip details |
 | Chip provenance (from text) | From your note |
 | Chip provenance (assumed) | We assumed this. Tap to change. |
 | Clarification intro | A quick question before we plan |
@@ -204,11 +205,12 @@ Step messages set expectations and map to real graph nodes: "Reading your trip d
 | Element | Copy |
 |---|---|
 | Validation pass | Everything fits: hours, travel times and budget. |
+| Validation pass, some data unknown | Everything we could check fits. Some hours or prices are not listed. |
 | Soft warning | Day 2 has three cafés in a row. Want more variety?  [Mix it up] |
 | Unknown cost | Cost unknown |
 | Estimated cost | About $15-35  (tooltip: Estimated from the price level. Actual prices may vary.) |
 | Local signal badges | Local pick  \|  Popular sight  \|  Hidden gem  (tooltip: Based on ratings and review patterns, not an official label.) |
-| Attribution | Powered by Foursquare  (shown in place details and map attribution) |
+| Attribution | Places © OpenStreetMap contributors, powered by Geoapify  (ADR-010; shown in map attribution) |
 | Unknown hours | Hours not listed. Check before you go. |
 | Fresh label | Checked today, 9:40 AM |
 | Stale label | Checked 3 days ago. Details may have changed.  [Check again] |

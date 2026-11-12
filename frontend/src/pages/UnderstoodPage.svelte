@@ -128,9 +128,14 @@
         </p>
       {/if}
       <PreferenceChips {chips} />
-      <button type="button" class="primary" onclick={startPlan}>
-        {t('setup.primaryCta')}
-      </button>
+      <div class="actions">
+        <button type="button" class="secondary" onclick={() => store.editTrip()}>
+          {t('understood.editTrip')}
+        </button>
+        <button type="button" class="primary" onclick={startPlan}>
+          {t('setup.primaryCta')}
+        </button>
+      </div>
     </section>
   </div>
 {/if}
@@ -159,6 +164,21 @@
     margin: 0;
     color: var(--color-text-muted);
     font-size: var(--text-sm);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .secondary {
+    background: transparent;
+    color: var(--color-brand);
+    border: 1px solid var(--color-brand);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
   }
   .primary {
     align-self: flex-start;

@@ -52,6 +52,7 @@
   },
   "understood": {
     "sectionTitle": "Here's what we understood",
+    "editTrip": "Edit trip details",
     "fromText": "From your note",
     "fromForm": "You chose this",
     "assumed": "We assumed this. Tap to change.",
@@ -113,6 +114,7 @@
   },
   "validation": {
     "pass": "Everything fits: hours, travel times and budget.",
+    "passWithGaps": "Everything we could check fits. Some hours or prices are not listed.",
     "softWarning": "Day {day} has three cafés in a row. Want more variety?",
     "mixItUp": "Mix it up",
     "msgLeg": "A leg on this day is over your {max}-minute travel limit.",

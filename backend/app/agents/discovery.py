@@ -23,6 +23,7 @@ from app.config import MAX_DISCOVERY_CALLS
 from app.tools import PlaceSearch, get_place_search
 from app.tools.base import LatLng
 from app.tools.mock_places import distance_km
+from app.tools.parallel import run_all
 from app.tools.place import Place
 
 MIN_PER_INTEREST = 3
@@ -116,7 +117,25 @@ def discover_places(
     hit_cap = False
 
     # Step 1 is a focused search for every interest; step 2 a wider one for those still short.
+    # The searches of one step run at the same time; their results are used in order.
+    def focused(interest: str) -> Callable[[], list[Place]]:
+        if search_words.get(interest):
+            return lambda: search.search_places(
+                near=near, query="", categories=search_words[interest], mode=mode,
+                limit=RESULTS_PER_SEARCH,
+            )
+        return lambda: search.search_places(
+            near=near, query=interest, categories=[interest] if interest else None, mode=mode,
+            limit=RESULTS_PER_SEARCH if interest else RESULTS_FOR_ANYTHING,
+        )
+
+    def wide(interest: str) -> Callable[[], list[Place]]:
+        return lambda: search.search_places(
+            near=near, query=interest, mode=mode, limit=RESULTS_PER_SEARCH * 2
+        )
+
     for step in ("focused", "wide"):
+        batch: list[str] = []
         for interest in interests:
             if len(per_interest[interest]) >= MIN_PER_INTEREST:
                 continue
@@ -126,29 +145,10 @@ def discover_places(
                 hit_cap = True
                 break
             calls += 1
-            try:
-                if step == "focused" and search_words.get(interest):
-                    results = search.search_places(
-                        near=near,
-                        query="",
-                        categories=search_words[interest],
-                        mode=mode,
-                        limit=RESULTS_PER_SEARCH,
-                    )
-                elif step == "focused":
-                    results = search.search_places(
-                        near=near,
-                        query=interest,
-                        categories=[interest] if interest else None,
-                        mode=mode,
-                        limit=RESULTS_PER_SEARCH if interest else RESULTS_FOR_ANYTHING,
-                    )
-                else:
-                    results = search.search_places(
-                        near=near,
-                        query=interest, mode=mode, limit=RESULTS_PER_SEARCH * 2
-                    )
-            except Exception:  # one failed call should not end the whole search
+            batch.append(interest)
+        make = focused if step == "focused" else wide
+        for interest, results in zip(batch, run_all([make(i) for i in batch]), strict=True):
+            if isinstance(results, Exception):  # one failed call should not end the search
                 failures += 1
                 continue
             for result in results:

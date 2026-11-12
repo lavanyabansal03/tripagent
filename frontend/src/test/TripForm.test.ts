@@ -38,3 +38,31 @@ describe('TripForm budget', () => {
     expect(onsubmit.mock.calls[0][0].budget).toBeNull()
   })
 })
+
+describe('TripForm after "Edit trip details"', () => {
+  it('comes back filled in with the last answers', () => {
+    const initial = {
+      destination: 'Kyoto',
+      start_date: '2026-12-01',
+      end_date: '2026-12-03',
+      budget: 250,
+      budget_strictness: 'flexible' as const,
+      mode: 'walking' as const,
+      pace: 'relaxed' as const,
+      max_travel_min: 20,
+      interests: ['temples'],
+      avoid: ['crowds'],
+      tourist_local_ratio: 70,
+      free_text: 'Quiet temples and tea.',
+      touched: ['destination', 'budget'],
+    }
+    const { container } = render(TripForm, { onsubmit: vi.fn(), demoMode: false, initial })
+
+    expect((screen.getByLabelText('Destination') as HTMLInputElement).value).toBe('Kyoto')
+    expect((container.querySelector('#start-date') as HTMLInputElement).value).toBe('2026-12-01')
+    expect((container.querySelector('#budget') as HTMLInputElement).value).toBe('250')
+    expect(
+      (screen.getByLabelText('Tell us more about your trip') as HTMLTextAreaElement).value,
+    ).toBe('Quiet temples and tea.')
+  })
+})

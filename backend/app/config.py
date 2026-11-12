@@ -22,6 +22,8 @@ MAX_DISCOVERY_CALLS = 8
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15
+# Place searches that may run at the same time (they only wait on the network).
+PARALLEL_SEARCHES = 6
 
 # LLM calls (Gemini and NVIDIA): tries per call on 429/503, i.e. 2 retries, then the
 # other LLM is the fallback (docs/03 L6 "2 retries + 1 fallback").
