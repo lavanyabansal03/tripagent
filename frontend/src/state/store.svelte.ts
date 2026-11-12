@@ -39,6 +39,10 @@ const initial = {
   questionCount: 0,
   // The last trip form, so "Edit trip details" can bring it back filled in.
   lastForm: null as TripFormInput | null,
+  // A5's question when a change was unclear ("Which place is closed: A or B?").
+  clarifyQuestion: null as string | null,
+  // The version before the current one, for the change summary (from the API).
+  previousItinerary: null as Itinerary | null,
 }
 
 const state = $state({ ...initial })
@@ -202,6 +206,19 @@ export const store = {
     state.trace = trace
     state.replans = replans
     state.versions = versions
+    const index = trip ? versions.indexOf(trip.current_version) : -1
+    const previous = index > 0 ? versions[index - 1] : null
+    state.previousItinerary = previous ? await api.getItinerary(tripId, previous) : null
+  },
+
+  get clarifyQuestion() {
+    return state.clarifyQuestion
+  },
+  get previousItinerary() {
+    return state.previousItinerary
+  },
+  clearQuestion() {
+    state.clarifyQuestion = null
   },
 
   async submitChange(text: string) {
@@ -209,9 +226,14 @@ export const store = {
     state.busy = true
     state.error = null
     try {
-      const { run_id, change } = await api.submitChange(state.trip.id, { text })
+      state.clarifyQuestion = null
+      const { run_id, change } = await api.submitChange(state.trip.id, {
+        text,
+        day: state.activeDay,
+      })
       if (!run_id) {
-        state.error = 'adjust.needsClarification'
+        // A5 needs one detail; the Adjust dialog shows its question.
+        state.clarifyQuestion = String(change?.payload?.question ?? '') || 'adjust.needsClarification'
         return change
       }
       await store.pollRun(state.trip.id, run_id)
@@ -227,7 +249,14 @@ export const store = {
     if (!state.trip) return null
     state.busy = true
     try {
-      const { run_id } = await api.submitChange(state.trip.id, { typed })
+      state.clarifyQuestion = null
+      const { run_id, change } = await api.submitChange(state.trip.id, {
+        typed,
+        day: state.activeDay,
+      })
+      if (!run_id) {
+        state.clarifyQuestion = String(change?.payload?.question ?? '') || 'adjust.needsClarification'
+      }
       if (run_id) {
         await store.pollRun(state.trip.id, run_id)
         state.showChangeSummary = true

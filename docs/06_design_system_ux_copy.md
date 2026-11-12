@@ -227,6 +227,7 @@ Step messages set expectations and map to real graph nodes: "Reading your trip d
 | Quick actions | Running late  \|  Lower budget  \|  Switch to walking  \|  Skip something |
 | CTA | Adjust my trip |
 | Working | Adjusting only what's affected... |
+| A5 needs one detail (shows A5's question) | We need one detail: {question} |
 
 #### Change summary
 

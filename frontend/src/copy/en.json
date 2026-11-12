@@ -171,6 +171,7 @@
     "quickCoffeeOnTheWay": "Coffee on the way",
     "cta": "Adjust my trip",
     "working": "Adjusting only what's affected…",
+    "question": "We need one detail: {question}",
     "cancel": "Cancel",
     "needsClarification": "We didn't catch what changed. Try something like \"I'm 1 hour late\" or \"skip museums\"."
   },
