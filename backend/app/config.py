@@ -25,6 +25,8 @@ MAX_DISCOVERY_CALLS = 8
 # Countries TripAgent plans trips in (ISO codes, lower case). USA only for now;
 # add codes here to allow more countries.
 ALLOWED_COUNTRIES = ["us"]
+# A2 famous places: the most names the LLM may suggest (each is one map lookup, or two).
+MAX_FAMOUS_PLACES = 12
 # Planner: most stops in one day for each pace (the 09:00-20:00 day still decides
 # whether they all fit).
 STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 6}

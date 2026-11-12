@@ -552,6 +552,8 @@ The budget validator checks the sum of upper-bound estimates against the budget 
 
 **Update (November 12, 2026): US destinations only for now.** The destination is looked up with Geoapify geocoding filtered to `ALLOWED_COUNTRIES = ["us"]` (`backend/app/config.py`). A street or neighbourhood with the same word ("Goa Way", "Little Tokyo") is not accepted. A city outside the USA ends the run with a clear message ("We could not find the destination … in the United States"), and so does a run where no places were found. Neither is retried. To allow more countries later, add their codes to `ALLOWED_COUNTRIES` and cities to the built-in list in `backend/app/tools/geocode.py`.
 
+**Update (November 12, 2026): famous places.** OpenStreetMap has no popularity, and searches return the places nearest the city centre, so plans had few well-known places. A2 now also asks the LLM to name the city's famous places (full name and short name, e.g. "The Museum of Modern Art" / "MoMA"), and code looks each name up with Geoapify geocoding and Place Details (`backend/app/agents/famous.py`, `GeoapifyPlaceSearch.find_by_name`). Only places found on the map with a good name match are used ("The Alamo Gift Shop" is not "The Alamo"), with the provider's own data, marked `local_signal="tourist"`, and placed first in the candidate list. How many: the "Famous sights / Local favourites" slider's share of the trip's stops, at most `MAX_FAMOUS_PLACES`. The lookup runs alongside the normal searches, and the Agent trace shows a `famous_places` step with the names asked for and found.
+
 ## 12. Reliability, Observability and Security
 
 | Concern | Design |

@@ -13,6 +13,7 @@ in a named state:
   ERROR       every search call failed
 """
 
+import logging
 from collections.abc import Callable
 from difflib import SequenceMatcher
 from typing import Any, Literal
@@ -25,6 +26,8 @@ from app.tools.base import LatLng
 from app.tools.mock_places import distance_km
 from app.tools.parallel import run_all
 from app.tools.place import Place
+
+logger = logging.getLogger(__name__)
 
 MIN_PER_INTEREST = 3
 SAME_NAME_SIMILARITY = 0.85
@@ -88,6 +91,17 @@ def _mix(per_interest: dict[str, list[str]], found: list[Place]) -> list[Place]:
     return [by_id[place_id] for place_id in ordered]
 
 
+def famous_first(famous: list[Place], others: list[Place]) -> list[Place]:
+    """Famous places first, then the rest; a place found both ways is kept once.
+
+    The planner uses the first places in the list, so the famous ones get into the plan.
+    """
+    found: list[Place] = []
+    for place in [*famous, *others]:
+        _add(found, place)
+    return found
+
+
 def discover_places(
     trip: dict[str, Any],
     search: PlaceSearch | None = None,
@@ -108,8 +122,9 @@ def discover_places(
     if plan is not None and interests != [""]:
         try:
             search_words = plan(trip, interests) or {}
-        except Exception:
-            search_words = {}  # no plan: search the interests as written
+        except Exception as error:  # no plan: search the interests as written
+            logger.warning("Search plan failed (%s); searching the interests as written", error)
+            search_words = {}
 
     found: list[Place] = []
     per_interest: dict[str, list[str]] = {interest: [] for interest in interests}
@@ -162,7 +177,8 @@ def discover_places(
         try:
             for result in search.search_places(near=near, mode=mode, limit=RESULTS_FOR_ANYTHING):
                 _add(found, result)
-        except Exception:
+        except Exception as error:
+            logger.warning("Last-resort place search failed: %s", error)
             failures += 1
 
     coverage = {interest: len(ids) for interest, ids in per_interest.items()}

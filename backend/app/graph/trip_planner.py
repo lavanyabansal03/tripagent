@@ -11,8 +11,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from app.agents.backup import attach_backups
-from app.agents.discovery import discover_places
+from app.agents.discovery import discover_places, famous_first
 from app.agents.discovery_plan import plan_with_llm
+from app.agents.famous import find_famous
 from app.agents.planner import build_plan_with_repairs
 from app.agents.repair_choice import choose_with_llm
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
@@ -20,6 +21,7 @@ from app.tools import get_place_search
 from app.tools.base import LatLng
 from app.tools.geocode import KNOWN_CITIES, locate_city
 from app.tools.mock_places import MockPlaceSearch, distance_km
+from app.tools.parallel import run_all
 
 
 class TripProblem(RuntimeError):
@@ -39,7 +41,6 @@ class TripState(TypedDict, total=False):
     save_attempts: int
     question: dict[str, Any]
     status: str
-    explanation: str
     find_error: str
     find_problem: bool  # True: a TripProblem; explain it, do not retry
     save_error: str
@@ -210,9 +211,18 @@ def _discover(
         finally:
             plan_ms[0] = _ms_since(started)
 
-    result = discover_places(trip, search=search, plan=timed_plan, near=near)
+    # The usual searches and the famous-places lookup run at the same time.
+    discovered, famous_found = run_all([
+        lambda: discover_places(trip, search=search, plan=timed_plan, near=near),
+        lambda: find_famous(trip, search, near),
+    ])
+    if isinstance(discovered, Exception):
+        raise discovered
+    result = discovered
     if result.status == "ERROR":
         raise RuntimeError(result.reason)  # find_places retries, then explains the failure
+    famous, famous_names = famous_found if not isinstance(famous_found, Exception) else ([], [])
+    result.places = famous_first(famous, result.places)
     if not result.places:
         where = trip.get("location_name") or trip.get("destination")
         raise TripProblem(
@@ -220,7 +230,8 @@ def _discover(
             "Check the destination, or try broader interests."
         )
     places = [place.model_dump(mode="json") for place in result.places]
-    return places, result.search_words, plan_ms[0]
+    famous_info = {"asked": famous_names, "found": [place.name for place in famous]}
+    return places, result.search_words, plan_ms[0], famous_info
 
 
 def _find_places(
@@ -230,15 +241,27 @@ def _find_places(
     started = perf_counter()
     try:
         found = search(state.get("trip", {}))
-        # A search may also return the LLM's search words and how long the LLM took:
-        # (places, {interest: words}) or (places, {interest: words}, plan_ms).
+        # A search may also return the LLM's search words, how long the LLM took and the
+        # famous places: (places, words), (places, words, plan_ms) or (..., famous_info).
         if not isinstance(found, tuple):
-            found = (found, {}, 0)
-        places, search_words, plan_ms = (*found, 0)[:3]
+            found = (found, {})
+        places, search_words, *rest = found
+        plan_ms = rest[0] if rest else 0
+        famous_info = rest[1] if len(rest) > 1 else {}
         logs = state.get("logs", [])
+        if famous_info.get("asked"):
+            logs = _log(
+                {**state, "logs": logs},
+                "famous_places",
+                f"LLM named {len(famous_info['asked'])} famous places; "
+                f"{len(famous_info['found'])} found on the map",
+                event_type="llm",
+                asked=famous_info["asked"],
+                found=famous_info["found"],
+            )
         if search_words:
             logs = _log(
-                state,
+                {**state, "logs": logs},  # keep the famous_places event logged above
                 "search_plan",
                 f"LLM chose search words for {len(search_words)} interest(s)",
                 event_type="llm",
