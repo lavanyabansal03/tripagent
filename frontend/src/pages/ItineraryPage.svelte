@@ -110,6 +110,16 @@
       </div>
     </header>
 
+    {#if store.actionError}
+      <div class="action-error" role="alert">
+        <Icon name="alert" size={16} />
+        <span>{t(store.actionError)}</span>
+        <button type="button" class="tool" onclick={() => store.clearActionError()}>
+          {t('common.close')}
+        </button>
+      </div>
+    {/if}
+
     <!-- Mobile view switch -->
     <nav class="mobile-tabs" aria-label={t('app.name')}>
       {#each [['plan', t('itinerary.planTab')], ['map', t('itinerary.mapTab')], ['trace', t('itinerary.traceTab')]] as [value, label] (value)}
@@ -217,6 +227,21 @@
     max-width: var(--content-max);
     margin: 0 auto;
     padding: var(--space-4);
+  }
+  .action-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-danger-soft);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+  }
+  .action-error span {
+    flex: 1;
   }
   .trip-header {
     display: flex;

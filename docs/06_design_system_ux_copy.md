@@ -252,6 +252,7 @@ Step messages set expectations and map to real graph nodes: "Reading your trip d
 | Travel limit too strict | Some days can't stay under 15 minutes between stops. Allow up to 25 minutes, or plan fewer areas per day? |
 | Provider down (degraded) | Live travel times are unavailable right now, so we used recent estimates. We'll refresh them when the service is back. |
 | Unknown failure | Something went wrong while planning. Your trip is saved. Try again in a moment.  [Try again] |
+| Change failed | We couldn't apply that change. Your plan is unchanged.  [Close] |
 | Change not understood | We didn't catch what changed. Try something like "I'm 1 hour late" or "skip museums". |
 
 ### 5.4 Localization notes

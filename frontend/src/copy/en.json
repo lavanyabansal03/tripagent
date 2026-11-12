@@ -208,6 +208,7 @@
   },
   "errors": {
     "unknown": "Something went wrong while planning. Your trip is saved. Try again in a moment.",
+    "changeFailed": "We couldn't apply that change. Your plan is unchanged.",
     "providerDown": "Live travel times are unavailable right now, so we used recent estimates. We'll refresh them when the service is back.",
     "changeNotUnderstood": "We didn't catch what changed. Try something like \"I'm 1 hour late\" or \"skip museums\".",
     "tripNotFound": "We couldn't find that trip. Start a new one.",
