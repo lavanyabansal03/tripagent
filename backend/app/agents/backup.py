@@ -143,6 +143,11 @@ def _neighbours(activity: dict, activities: list[dict], replacement: dict) -> li
     return [*before, replacement, *after]
 
 
+def _plain_name(name: str | None) -> str:
+    """'The High Line' and 'the  high line' compare equal."""
+    return " ".join(str(name or "").lower().split())
+
+
 def _check_candidate(
     activity: dict,
     candidate: dict,
@@ -166,6 +171,16 @@ def _check_candidate(
 
     if not candidate.get("id") or candidate.get("id") in planned_ids:
         return None  # the same place, or one already in the plan
+
+    # The same name is the same place listed twice, or one already in the plan (seen live:
+    # "The High Line" was offered as the backup for The High Line, one more map piece of it).
+    planned_names = {
+        _plain_name((item.get("place") or {}).get("name"))
+        for item in activities
+        if item.get("status") != "cancelled"
+    } | {_plain_name(original.get("name"))}
+    if _plain_name(candidate.get("name")) in planned_names - {""}:
+        return None
 
     if any(
         place.get(key) is None
