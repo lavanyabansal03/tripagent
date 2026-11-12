@@ -38,7 +38,8 @@ STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 5}
 ROUTES_TIME_LIMIT_S = 10
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
-MAX_BACKUP_SEARCHES = 15
+# 40 covers a packed 6-day trip (30 stops); with 15, half the stops had no backup.
+MAX_BACKUP_SEARCHES = 40
 # Place searches that may run at the same time (they only wait on the network).
 PARALLEL_SEARCHES = 6
 
