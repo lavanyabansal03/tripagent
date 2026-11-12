@@ -97,3 +97,27 @@ def test_demo_mode_estimate_gives_a_leg_with_distance(monkeypatch):
     assert leg["source"] == "estimate"
     assert 12 <= leg["duration_min"] <= 18
     assert leg["distance_km"] > 1
+
+
+def test_slow_provider_gets_the_estimate_after_the_time_limit():
+    # Seen live: transit for 27 legs took 48 s, most of a 76 s plan.
+    import time as clock
+
+    from app.tools.routes import add_route_legs
+    from app.tools.travel_time import TravelTime
+
+    def slow(origin, destination, mode):
+        clock.sleep(2)
+        return TravelTime(minutes=99, mode=mode, source="transitous")
+
+    itinerary = {"days": [{"day": 1, "activities": [
+        {"id": "a", "place": {"lat": 40.75, "lng": -73.98}},
+        {"id": "b", "place": {"lat": 40.76, "lng": -73.97}},
+    ]}]}
+    started = clock.perf_counter()
+
+    assert add_route_legs(itinerary, "transit", travel=slow, time_limit_s=0.2) == 1
+
+    assert clock.perf_counter() - started < 1.5  # did not wait for the slow provider
+    leg = itinerary["days"][0]["legs"][0]
+    assert leg["source"] == "estimate" and leg["duration_min"] < 99

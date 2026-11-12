@@ -30,6 +30,9 @@ MAX_FAMOUS_PLACES = 12
 # Planner: most stops in one day for each pace, counting the lunch stop (the 09:00-20:00
 # day still decides whether they all fit).
 STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 5}
+# Travel times between stops: the longest the whole step may take; slower legs get the
+# rough estimate (transit lookups can take 5-10 s each).
+ROUTES_TIME_LIMIT_S = 10
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15

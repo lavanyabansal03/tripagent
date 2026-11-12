@@ -407,6 +407,7 @@ def build_trip_graph(
             )
         # Travel time and route for every stop-to-stop leg, now that the plan is final.
         # A failure only means no route lines; the plan itself is still good.
+        routes_started = perf_counter()
         try:
             leg_count = add_route_legs(itinerary, trip.get("mode", "walking"))
             sources = sorted({leg["source"] for d in itinerary["days"] for leg in d["legs"]})
@@ -416,6 +417,7 @@ def build_trip_graph(
                 f"Added travel times for {leg_count} legs",
                 event_type="tool",
                 sources=sources,
+                duration_ms=_ms_since(routes_started),
             )
         except Exception as error:
             logs = _log(
@@ -424,6 +426,7 @@ def build_trip_graph(
                 "Travel times between stops failed; the plan has no route lines",
                 event_type="tool",
                 error=str(error),
+                duration_ms=_ms_since(routes_started),
             )
         validation_logs = _log(
             {**state, "logs": logs},

@@ -21,6 +21,10 @@ def read_with_nvidia(note: str) -> Preferences | None:
     if not settings.NVIDIA_API_KEY:
         return None
     answer = ask_nvidia_for_json(build_prompt(note), Preferences.model_json_schema())
+    # Seen live: NVIDIA sometimes answers "avoid": null for "nothing to avoid". A null
+    # field means "not stated", which is each field's default (empty list or None).
+    if isinstance(answer, dict):
+        answer = {key: value for key, value in answer.items() if value is not None}
     return Preferences.model_validate(answer)
 
 
