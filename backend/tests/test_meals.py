@@ -104,3 +104,16 @@ def test_lunch_skips_a_dinner_only_restaurant():
     names = [a["place"]["name"] for a in itinerary["days"][0]["activities"]]
     assert "Lunch Place" in names
     assert "Dinner Only" not in names
+
+
+def test_famous_food_spot_is_lunch_before_a_closer_restaurant():
+    # Seen live: Joe's Pizza and Ess-a-Bagel were found but lost lunch to closer places.
+    nearby = place("Corner Diner", ["restaurant"], ["food"], 47.6001, -122.3301)
+    famous = place("Joe's Pizza", ["fast_food"], ["food"], 47.615, -122.34)
+    famous["local_signal"] = "tourist"
+
+    itinerary = plan_for("moderate", sights(10) + [nearby, famous])
+
+    lunches = [day["activities"][LUNCH_SLOT]["place"]["name"] for day in itinerary["days"]]
+    assert lunches[0] == "Joe's Pizza"  # famous first
+    assert "Corner Diner" in lunches  # the nearby one is still used on another day

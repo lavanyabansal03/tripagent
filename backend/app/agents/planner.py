@@ -175,7 +175,9 @@ def _schedule_days(
             ordered.append(nearest)
         buckets[day_index] = ordered
 
-    # Lunch: the unused restaurant closest to each day's stops, after the morning stops.
+    # Lunch: a famous food spot first ("Joe's Pizza"), else the unused restaurant closest
+    # to the day's stops; it goes after the morning stops. The nearby restaurants are
+    # not lost: the Backup agent offers them as this stop's backups.
     unused = list(meals)
     for day_index, bucket in enumerate(buckets):
         if not unused:
@@ -185,7 +187,10 @@ def _schedule_days(
         located_stops = [place for place in bucket if has_coordinates(place)]
         meal = min(
             choices,
-            key=lambda m: min((distance(m, stop) for stop in located_stops), default=0.0),
+            key=lambda m: (
+                m.get("local_signal") != "tourist",  # famous (False) sorts first
+                min((distance(m, stop) for stop in located_stops), default=0.0),
+            ),
         )
         unused.remove(meal)
         bucket.insert(min(LUNCH_SLOT, len(bucket)), meal)
