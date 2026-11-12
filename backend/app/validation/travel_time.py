@@ -5,6 +5,11 @@ from app.tools.base import LatLng, Mode
 from app.tools.mock_places import distance_km, rough_minutes
 
 
+def _label(activity: dict) -> str:
+    """How a stop is named in messages the traveller reads: its place name, else its id."""
+    return (activity.get("place") or {}).get("name") or activity.get("id") or "unknown"
+
+
 def check_travel_time(
     activities: list[dict],
     mode: Mode = "walking",
@@ -56,8 +61,8 @@ def check_travel_time(
         ):
             data_gaps.append(
                 f"Coordinates missing between "
-                f"{first_id or 'unknown'} and "
-                f"{second_id or 'unknown'}."
+                f"{_label(first)} and "
+                f"{_label(second)}."
             )
             gap_ids.extend(pair_ids)
             continue
@@ -82,8 +87,8 @@ def check_travel_time(
 
         if estimated_minutes > available_minutes:
             hard_issues.append(
-                f"{first_id or 'unknown'} to "
-                f"{second_id or 'unknown'}: "
+                f"{_label(first)} to "
+                f"{_label(second)}: "
                 f"{estimated_minutes:.1f} minutes estimated, "
                 f"but only {available_minutes:.1f} "
                 "minutes available."
@@ -95,8 +100,8 @@ def check_travel_time(
             and estimated_minutes > max_travel_min
         ):
             soft_issues.append(
-                f"{first_id or 'unknown'} to "
-                f"{second_id or 'unknown'}: "
+                f"{_label(first)} to "
+                f"{_label(second)}: "
                 f"{estimated_minutes:.1f} minutes estimated, "
                 f"exceeding the user's "
                 f"{max_travel_min}-minute travel limit."
