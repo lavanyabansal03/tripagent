@@ -484,7 +484,7 @@ def get_versions(trip_id: str) -> list[int]:
 @router.get("/{trip_id}/replans", response_model=list[dict[str, Any]])
 def get_replans(trip_id: str) -> list[dict[str, Any]]:
     _get_trip(trip_id)
-    return []
+    return storage.list_replans(trip_id)  # changes during the trip, oldest first
 
 
 @runs_router.get("/{run_id}", response_model=RunStatus)
