@@ -55,7 +55,7 @@
             <div class="signals">
               <span class="similarity" title={t('validation.signalTooltip')}>
                 <Icon name="check" size={12} />
-                {Math.round(backup.purpose_similarity * 100)}% {t('change.kept')}
+                {t('validation.backupMatch', { n: Math.round(backup.purpose_similarity * 100) })}
               </span>
               {#if backup.cost_delta != null && backup.cost_delta < 0}
                 <span class="cheaper">{formatCost(backup.cost_delta, null, null, 'known')}</span>
@@ -71,7 +71,7 @@
                   if (!disabled) onswap(backup.place_id, placeName(backup.place_id))
                 }}
               >
-                {t('change.replaced')}
+                {t('validation.useBackup')}
               </button>
             </div>
           </li>

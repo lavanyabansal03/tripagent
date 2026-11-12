@@ -215,6 +215,8 @@ Step messages set expectations and map to real graph nodes: "Reading your trip d
 | Fresh label | Checked today, 9:40 AM |
 | Stale label | Checked 3 days ago. Details may have changed.  [Check again] |
 | Backups header | Backups (same vibe) |
+| Backup match | {n}% match |
+| Use a backup (button) | Use this instead |
 | No backups (empty state) | No backup found nearby yet. We'll search again if this falls through. |
 | Lock tooltip | Keep this activity no matter what changes. |
 
