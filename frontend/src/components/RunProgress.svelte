@@ -5,15 +5,19 @@
 
   interface Props {
     run: RunStatus | null
+    /** Planning has started but no run status exists yet (live mode: the request is
+     *  still running). Shows the first step as working instead of a frozen list. */
+    busy?: boolean
   }
 
-  let { run }: Props = $props()
+  let { run, busy = false }: Props = $props()
 
   // Step messages map to real graph nodes (UX Copy Guide, "Planning in progress").
   const stepKeys = ['reading', 'finding', 'checking', 'arranging', 'backups', 'doubleChecking']
   const stepIndex = $derived(run?.step_index ?? 0)
   const total = $derived(run?.step_count ?? stepKeys.length)
   const degraded = $derived(run?.status === 'failed')
+  const active = $derived(run?.status === 'running' || (busy && !run))
   let slow = $state(false)
 
   // "Still working..." after 12s (copy guide).
@@ -27,19 +31,19 @@
   })
 </script>
 
-<section class="progress" aria-live="polite" aria-busy={run?.status === 'running'}>
+<section class="progress" aria-live="polite" aria-busy={active}>
   <h2>{t('planning.title')}</h2>
   <ol class="steps">
     {#each stepKeys as key, i (key)}
       <li
         class="step"
         class:done={i < stepIndex}
-        class:current={i === stepIndex && run?.status === 'running'}
+        class:current={i === stepIndex && active}
       >
         <span class="marker">
           {#if i < stepIndex}
             <Icon name="check" size={14} />
-          {:else if i === stepIndex && run?.status === 'running'}
+          {:else if i === stepIndex && active}
             <Icon name="spinner" size={14} />
           {:else}
             <span class="dot"></span>
@@ -52,7 +56,7 @@
   <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={total} aria-valuenow={stepIndex}>
     <div class="fill" style:width="{(stepIndex / total) * 100}%"></div>
   </div>
-  {#if slow && run?.status === 'running'}
+  {#if slow && active}
     <p class="slow">
       <Icon name="info" size={14} />
       {t('planning.slow')}

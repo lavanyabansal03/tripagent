@@ -10,23 +10,37 @@
     budget?: number | null
     minutes?: number
     onrelax?: (label: string) => void
+    /** Shown as "Try again" (for a failure, not for a trip that cannot fit). */
+    onretry?: () => void
+    /** Shown as "Edit trip details". */
+    onedit?: () => void
   }
 
-  let { report, city = '', budget = null, minutes = 15, onrelax }: Props = $props()
+  let {
+    report,
+    city = '',
+    budget = null,
+    minutes = 15,
+    onrelax,
+    onretry,
+    onedit,
+  }: Props = $props()
 
+  // "error" means planning failed (a crash, the network), not that the trip cannot fit.
+  const failed = $derived(report.blocking_rule === 'error')
   const body = $derived(
     report.explanation === 'infeasible.noPlan'
       ? t('infeasible.noPlan', { city, budget: budget ?? '' })
       : report.explanation === 'infeasible.travelLimit'
         ? t('infeasible.travelLimit', { minutes, suggested: minutes + 10 })
-        : report.explanation,
+        : t(report.explanation), // an i18n key such as errors.unknown, or the backend's sentence
   )
 </script>
 
 <section class="notice" role="alert" aria-labelledby="infeasible-title">
   <header>
     <Icon name="alert" size={20} />
-    <h2 id="infeasible-title">{t('infeasible.title')}</h2>
+    <h2 id="infeasible-title">{failed ? t('planning.failed') : t('infeasible.title')}</h2>
   </header>
   <p class="body">{body}</p>
   {#if report.suggestions.length}
@@ -36,6 +50,20 @@
           {t(suggestion.label)}
         </button>
       {/each}
+    </div>
+  {/if}
+  {#if onretry || onedit}
+    <div class="suggestions">
+      {#if onretry}
+        <button type="button" class="chip" onclick={() => onretry?.()}>
+          {t('infeasible.tryAgain')}
+        </button>
+      {/if}
+      {#if onedit}
+        <button type="button" class="chip" onclick={() => onedit?.()}>
+          {t('understood.editTrip')}
+        </button>
+      {/if}
     </div>
   {/if}
 </section>

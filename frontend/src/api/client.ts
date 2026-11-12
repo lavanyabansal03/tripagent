@@ -63,14 +63,37 @@ export async function checkHealth(): Promise<HealthStatus | null> {
   }
 }
 
+/**
+ * A message the traveller can read for a failed request, instead of raw JSON.
+ * The backend sends {"detail": "..."} (a sentence) or, for a bad form value, a list
+ * of problems. A server crash (5xx) gets the copy-guide text (an i18n key).
+ */
+export function errorMessage(status: number, body: string): string {
+  if (status >= 500) return 'errors.unknown'
+  try {
+    const detail = JSON.parse(body)?.detail
+    if (typeof detail === 'string' && detail) return detail
+    const first = Array.isArray(detail) ? detail[0]?.msg : null
+    if (typeof first === 'string' && first) return first.replace(/^Value error, /, '')
+  } catch {
+    // not JSON: fall through to the generic message
+  }
+  return 'errors.unknown'
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...init,
+    })
+  } catch {
+    throw new Error('errors.unknown') // offline or the backend is not reachable
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(text || `Request failed: ${res.status}`)
+    throw new Error(errorMessage(res.status, text))
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T

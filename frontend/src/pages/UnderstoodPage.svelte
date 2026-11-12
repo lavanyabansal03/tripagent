@@ -22,7 +22,13 @@
   let { tripId, runId, needsClarify }: Props = $props()
 
   const questions = $derived(mockEngine.getTripRecord(tripId)?.questions ?? [])
-  const running = $derived(store.run?.status === 'running')
+  // store.planning covers live mode, where "Build my plan" waits for the whole plan.
+  const running = $derived(store.run?.status === 'running' || store.planning)
+  // A failed run brings its own report; a failed request (network, server) only a message.
+  const problem = $derived(
+    store.infeasible ??
+      (store.error ? { blocking_rule: 'error', explanation: store.error, suggestions: [] } : null),
+  )
   const finished = $derived(store.run?.status === 'done' && Boolean(store.itinerary))
 
   // Once the plan completes, move to the itinerary route.
@@ -33,8 +39,12 @@
   })
 
   onMount(async () => {
-    await store.reload(tripId)
-    if (runId) await store.pollRun(tripId, runId)
+    try {
+      await store.reload(tripId)
+      if (runId) await store.pollRun(tripId, runId)
+    } catch {
+      store.setError('errors.loadFailed')
+    }
   })
 
   const chips = $derived(
@@ -110,13 +120,15 @@
     />
   </div>
 {:else if running}
-  <RunProgress run={store.run} />
-{:else if store.infeasible}
+  <RunProgress run={store.run} busy={store.planning} />
+{:else if problem}
   <InfeasibleNotice
-    report={store.infeasible}
+    report={problem}
     city={store.requirements?.destination}
     budget={store.requirements?.budget}
     minutes={store.requirements?.max_travel_min}
+    onretry={problem.blocking_rule === 'error' ? startPlan : undefined}
+    onedit={() => store.editTrip()}
   />
 {:else}
   <div class="wrap">
@@ -132,7 +144,7 @@
         <button type="button" class="secondary" onclick={() => store.editTrip()}>
           {t('understood.editTrip')}
         </button>
-        <button type="button" class="primary" onclick={startPlan}>
+        <button type="button" class="primary" onclick={startPlan} disabled={store.planning}>
           {t('setup.primaryCta')}
         </button>
       </div>
@@ -190,5 +202,9 @@
     font-size: var(--text-md);
     font-weight: var(--weight-semibold);
     cursor: pointer;
+  }
+  .primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>
