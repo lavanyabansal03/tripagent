@@ -1,7 +1,6 @@
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from app.agents import discovery
 from app.config import MAX_FIND_ATTEMPTS
 from app.graph import trip_planner
 from app.graph.retry_example import run_retry_example
@@ -29,7 +28,7 @@ def test_trip_graph_asks_for_dates_then_runs_in_order():
     checkpointer = InMemorySaver()
     graph = build_trip_graph(checkpointer=checkpointer)
     config = {"configurable": {"thread_id": "test-trip"}}
-    graph.invoke({"trip": {"destination": "Lisbon"}, "logs": []}, config)
+    graph.invoke({"trip": {"destination": "Seattle"}, "logs": []}, config)
 
     waiting = graph.get_state(config).values
     assert waiting["status"] == "awaiting_input"
@@ -141,8 +140,10 @@ def test_searches_each_interest_and_merges_results(monkeypatch):
             return mock_search.search_places(**kwargs)
 
     # The graph now searches through the Discovery agent (one search per interest).
-    monkeypatch.setattr(discovery, "get_place_search", lambda: RecordingSearch())
-    places = trip_planner._search_places({"interests": ["coffee", "museums"]})
+    # The graph picks the place search itself (so it can check demo mode).
+    monkeypatch.setattr(trip_planner, "get_place_search", lambda: RecordingSearch())
+    trip = {"destination": "Seattle", "interests": ["coffee", "museums"]}
+    places = trip_planner._search_places(trip)
 
     assert queries[:2] == ["coffee", "museums"]
     assert set(queries) == {"coffee", "museums"}
@@ -162,7 +163,7 @@ def test_save_failure_is_bounded_and_explained():
 
     graph = build_trip_graph(checkpointer=InMemorySaver(), save=failed_save)
     result = graph.invoke(
-        {"trip": {"destination": "Rome", "start_date": "2026-11-01", "end_date": "2026-11-02"}},
+        {"trip": {"destination": "Seattle", "start_date": "2026-11-01", "end_date": "2026-11-02"}},
         {"configurable": {"thread_id": "failed-save"}},
     )
 

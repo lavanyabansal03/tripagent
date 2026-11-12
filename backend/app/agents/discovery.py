@@ -28,6 +28,8 @@ from app.tools.place import Place
 MIN_PER_INTEREST = 3
 SAME_NAME_SIMILARITY = 0.85
 SAME_PLACE_KM = 0.05  # 50 metres
+# Exactly the same name this close is one place listed twice (a park and its playground).
+SAME_NAME_KM = 1.0
 RESULTS_PER_SEARCH = 10
 RESULTS_FOR_ANYTHING = 30  # a search with no interest returns a bigger mix
 
@@ -42,12 +44,14 @@ class DiscoveryResult(BaseModel):
 
 
 def _same_place(a: Place, b: Place) -> bool:
-    """Same id, or nearly the same name within 50 m (one cafe listed twice)."""
+    """Same id; nearly the same name within 50 m; or exactly the same name within 1 km."""
     if a.id == b.id:
         return True
+    km = distance_km(LatLng(lat=a.lat, lng=a.lng), b.lat, b.lng)
+    if " ".join(a.name.lower().split()) == " ".join(b.name.lower().split()) and km < SAME_NAME_KM:
+        return True
     similarity = SequenceMatcher(None, a.name.lower(), b.name.lower()).ratio()
-    close = distance_km(LatLng(lat=a.lat, lng=a.lng), b.lat, b.lng) < SAME_PLACE_KM
-    return similarity >= SAME_NAME_SIMILARITY and close
+    return similarity >= SAME_NAME_SIMILARITY and km < SAME_PLACE_KM
 
 
 def _add(found: list[Place], place: Place) -> tuple[Place, bool]:
@@ -88,6 +92,7 @@ def discover_places(
     search: PlaceSearch | None = None,
     max_calls: int = MAX_DISCOVERY_CALLS,
     plan: Callable[[dict[str, Any], list[str]], dict[str, list[str]]] | None = None,
+    near: LatLng | None = None,
 ) -> DiscoveryResult:
     """Find candidate places for the trip's interests within a fixed number of searches.
 
@@ -124,6 +129,7 @@ def discover_places(
             try:
                 if step == "focused" and search_words.get(interest):
                     results = search.search_places(
+                        near=near,
                         query="",
                         categories=search_words[interest],
                         mode=mode,
@@ -131,6 +137,7 @@ def discover_places(
                     )
                 elif step == "focused":
                     results = search.search_places(
+                        near=near,
                         query=interest,
                         categories=[interest] if interest else None,
                         mode=mode,
@@ -138,6 +145,7 @@ def discover_places(
                     )
                 else:
                     results = search.search_places(
+                        near=near,
                         query=interest, mode=mode, limit=RESULTS_PER_SEARCH * 2
                     )
             except Exception:  # one failed call should not end the whole search
@@ -152,7 +160,7 @@ def discover_places(
     if not found and interests != [""] and calls < max_calls:
         calls += 1
         try:
-            for result in search.search_places(mode=mode, limit=RESULTS_FOR_ANYTHING):
+            for result in search.search_places(near=near, mode=mode, limit=RESULTS_FOR_ANYTHING):
                 _add(found, result)
         except Exception:
             failures += 1

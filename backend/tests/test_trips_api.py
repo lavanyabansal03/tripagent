@@ -11,7 +11,7 @@ def test_trip_create_clarify_plan_and_trace_follow_svelte_contract():
     created = client.post(
         "/api/trips",
         json={
-            "destination": "Lisbon",
+            "destination": "Seattle",
             "interests": ["food"],
             "free_text": "A relaxed trip",
         },
@@ -20,7 +20,7 @@ def test_trip_create_clarify_plan_and_trace_follow_svelte_contract():
     assert created.status_code == 201
     payload = created.json()
     trip_id = payload["trip"]["id"]
-    assert payload["trip"]["destination"] == "Lisbon"
+    assert payload["trip"]["destination"] == "Seattle"
     assert payload["requirements"]["interests"] == ["food"]
     assert [
         (question["id"], question["field"]) for question in payload["questions"]

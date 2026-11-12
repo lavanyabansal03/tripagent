@@ -40,6 +40,16 @@ _DESTINATION_TIMEZONES = {
 }
 
 
+def _trip_timezone(trip: dict[str, Any]) -> ZoneInfo:
+    """The time zone found when the city was looked up, else the built-in list."""
+    try:
+        if trip.get("timezone"):
+            return ZoneInfo(trip["timezone"])
+    except (ValueError, KeyError):
+        pass
+    return _destination_timezone(str(trip.get("destination", "")))
+
+
 def _destination_timezone(destination: str) -> ZoneInfo:
     normalized = destination.strip().lower()
     timezone_name = next(
@@ -257,7 +267,7 @@ def plan_and_validate(
     day_count = (end_date - start_date).days + 1
     daily_start = _as_time(trip.get("daily_start", "09:00"), time(9, 0))
     daily_end = _as_time(trip.get("daily_end", "20:00"), time(20, 0))
-    destination_timezone = _destination_timezone(str(trip.get("destination", "")))
+    destination_timezone = _trip_timezone(trip)
     mode: Mode = trip.get("mode", "walking")
     buckets = _schedule_days(places, day_count, repair_iteration)
     days: list[dict[str, Any]] = []

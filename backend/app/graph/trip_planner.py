@@ -15,6 +15,10 @@ from app.agents.discovery_plan import plan_with_llm
 from app.agents.planner import build_plan_with_repairs
 from app.agents.repair_choice import choose_with_llm
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
+from app.tools import get_place_search
+from app.tools.base import LatLng
+from app.tools.geocode import KNOWN_CITIES, locate_city
+from app.tools.mock_places import MockPlaceSearch, distance_km
 
 
 class TripState(TypedDict, total=False):
@@ -36,6 +40,9 @@ class TripState(TypedDict, total=False):
     terminal: str
     explanation: str
     repair_iterations: int
+
+
+SEATTLE = LatLng(lat=KNOWN_CITIES['seattle'][0], lng=KNOWN_CITIES['seattle'][1])
 
 
 def _log(state: TripState, step: str, message: str, **details: Any) -> list[dict[str, Any]]:
@@ -60,10 +67,21 @@ def _read_trip(state: TripState) -> dict[str, Any]:
     trip = dict(state.get("trip", {}))
     trip.setdefault("destination", "")
     trip.setdefault("interests", [])
+    # Where is the trip? Every search and every time depends on it.
+    message = "Trip details read"
+    if "center" not in trip:
+        location = locate_city(trip["destination"])
+        if location is not None:
+            trip["center"] = {"lat": location.lat, "lng": location.lng}
+            trip["timezone"] = trip.get("timezone") or location.timezone
+            trip["location_name"] = location.name
+            message = f"Trip details read; destination found: {location.name}"
+        else:
+            message = f"Trip details read; destination not found: {trip['destination']!r}"
     return {
         "trip": trip,
         "status": "running",
-        "logs": _log(state, "read", "Trip details read"),
+        "logs": _log(state, "read", message),
     }
 
 
@@ -148,7 +166,23 @@ def _search_places(trip: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _discover(trip: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
     """Like _search_places, plus the LLM's search words for the Agent trace (A2)."""
-    result = discover_places(trip, plan=plan_with_llm)
+    center = trip.get("center")
+    if center is None:
+        location = locate_city(str(trip.get("destination", "")))
+        center = {"lat": location.lat, "lng": location.lng} if location else None
+    if center is None:
+        raise RuntimeError(
+            f"We could not find the destination {trip.get('destination')!r}. "
+            "Please check the spelling, or add the country (for example 'Paris, France')."
+        )
+    near = LatLng(lat=center["lat"], lng=center["lng"])
+    search = get_place_search()
+    if isinstance(search, MockPlaceSearch) and distance_km(SEATTLE, near.lat, near.lng) > 80:
+        raise RuntimeError(
+            "Demo mode only has places in Seattle. Plan a Seattle trip, or turn on live "
+            "mode (DEMO_MODE=false with a Geoapify key) for other cities."
+        )
+    result = discover_places(trip, search=search, plan=plan_with_llm, near=near)
     if result.status == "ERROR":
         raise RuntimeError(result.reason)  # find_places retries, then explains the failure
     return [place.model_dump(mode="json") for place in result.places], result.search_words
