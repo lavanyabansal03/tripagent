@@ -202,3 +202,48 @@ def test_no_keys_at_all_gives_none_without_any_request():
 
 def test_schema_sent_to_nvidia_is_valid_json():
     json.dumps(SCHEMA)
+
+
+# --- null means "not stated" for every agent, not only the trip note ------------------
+# Seen live: NVIDIA answers null for "nothing here". Each case below used to throw the
+# whole answer away (the agent then fell back to Gemini or plain rules).
+
+from app.agents import llm  # noqa: E402
+from app.agents.change_interpreter import ChangeShape  # noqa: E402
+from app.agents.explainer import ExplanationShape  # noqa: E402
+from app.agents.famous import FamousNames  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "shape, answer, check",
+    [
+        (
+            ChangeShape,
+            {"type": "time", "minutes": 30, "avoid": None, "trigger": None},
+            lambda r: r.minutes == 30 and r.avoid == [] and r.trigger == "",
+        ),
+        (
+            FamousNames,
+            {"places": [{"name": "Pike Place Market", "short_name": None}, None]},
+            lambda r: [p.name for p in r.places] == ["Pike Place Market"]
+            and r.places[0].short_name == "",
+        ),
+        (
+            ExplanationShape,
+            {"trigger": "you're running late", "reasons": None},
+            lambda r: r.trigger == "you're running late" and r.reasons == [],
+        ),
+    ],
+)
+def test_every_agent_reads_null_as_not_stated(nvidia_key, monkeypatch, shape, answer, check):
+    monkeypatch.setattr(llm, "ask_nvidia_for_json", lambda _prompt, _schema: answer)
+
+    assert check(llm.ask_nvidia("question", shape))
+
+
+def test_a_required_field_that_is_null_is_still_rejected(nvidia_key, monkeypatch):
+    # "type" has no default: dropping its null must not invent a value.
+    monkeypatch.setattr(llm, "ask_nvidia_for_json", lambda _p, _s: {"type": None})
+
+    with pytest.raises(ValueError):
+        llm.ask_nvidia("question", ChangeShape)
