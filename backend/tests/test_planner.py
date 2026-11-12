@@ -103,6 +103,23 @@ def test_pace_decides_how_many_stops_a_day_gets():
     assert counts == {"relaxed": [3, 3], "moderate": [4, 4], "packed": [6, 6]}
 
 
+def test_stops_that_do_not_fit_the_day_do_not_fail_the_trip():
+    # Seen live: a packed San Antonio trip ended INFEASIBLE because 6 places were far apart.
+    far_apart = [
+        make_place(f"p{i}", f"Place {i}", 47.60 + i * 0.05, -122.33, experience=kind)
+        for i, kind in zip(range(6), ["nature", "culture", "food"] * 2, strict=True)
+    ]
+    trip = make_trip(pace="packed", daily_end="13:00")
+
+    itinerary, checks, _, terminal, _ = build_plan_with_repairs(trip, far_apart)
+
+    assert terminal == "PASS"
+    assert 0 < len(itinerary["days"][0]["activities"]) < 6
+    left_out = next(c for c in checks if c["rule"] == "daily_schedule")
+    assert left_out["severity"] == "soft"
+    assert left_out["message"].startswith("Not enough time in the day for: ")
+
+
 def test_unknown_pace_uses_moderate():
     itinerary, _ = plan_and_validate(make_trip(pace=None), many_places(10))
 

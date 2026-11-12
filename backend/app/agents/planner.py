@@ -386,9 +386,11 @@ def plan_and_validate(
                 version=version,
                 rule="daily_schedule",
                 passed=False,
-                severity="hard",
+                # A place that does not fit before the day ends is simply not used; the
+                # plan itself is fine. It was "hard" and failed whole trips at a packed pace.
+                severity="soft",
                 message=(
-                    "Daily time limits prevented scheduling: "
+                    "Not enough time in the day for: "
                     + ", ".join(unscheduled_places)
                     + "."
                 ),

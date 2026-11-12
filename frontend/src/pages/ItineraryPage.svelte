@@ -4,7 +4,7 @@
    * Desktop: day tabs + validation + activity list on the left, map on the
    * right, Adjust trip and Trace in the header. Mobile: Plan | Map | Trace tabs.
    */
-  import { t } from '../copy/i18n'
+  import { formatTripDate, t } from '../copy/i18n'
   import type { ChangeEvent, Place } from '../types'
   import { CHANGES_AVAILABLE, DEMO_MODE } from '../api/client'
   import { store } from '../state/store.svelte'
@@ -49,7 +49,9 @@
   )
 
   const dates = $derived(
-    store.trip ? `${store.trip.start_date} – ${store.trip.end_date}` : '',
+    store.trip
+      ? `${formatTripDate(store.trip.start_date)} – ${formatTripDate(store.trip.end_date)}`
+      : '',
   )
 
   function handleSwap(activityId: string, backupId: string, _name: string) {

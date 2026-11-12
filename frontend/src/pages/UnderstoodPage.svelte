@@ -4,7 +4,7 @@
    * preference review, then the RunProgress while the graph runs.
    */
   import { onMount } from 'svelte'
-  import { t, formatMoney } from '../copy/i18n'
+  import { t, formatMoney, formatTripDate } from '../copy/i18n'
   import type { Provenance } from '../types'
   import { mockEngine } from '../api/client'
   import { store } from '../state/store.svelte'
@@ -124,7 +124,7 @@
       <h1 id="understood-title">{t('understood.sectionTitle')}</h1>
       {#if store.trip}
         <p class="summary">
-          {store.trip.destination} · {store.trip.start_date} – {store.trip.end_date}
+          {store.trip.destination} · {formatTripDate(store.trip.start_date)} – {formatTripDate(store.trip.end_date)}
         </p>
       {/if}
       <PreferenceChips {chips} />
