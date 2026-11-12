@@ -30,7 +30,9 @@ def test_seattle_mock_covers_common_interests():
     result = discover_places({"interests": ["cafe", "nature", "culture"]}, MockPlaceSearch())
     assert result.status == "PASS"
     assert all(n >= MIN_PER_INTEREST for n in result.coverage.values())
-    assert result.calls_used == 3  # one focused search each was enough
+    # One focused search each was enough, plus one lunch search (no interest found food).
+    assert result.calls_used == 4
+    assert any("restaurant" in p.categories for p in result.places)
     assert len({p.id for p in result.places}) == len(result.places)  # no duplicates
 
 
@@ -44,8 +46,10 @@ def test_first_places_mix_the_interests():
 def test_thin_interest_gets_one_wider_search_then_stops():
     search = CountingSearch(lambda **kw: [make_place("Lone Gallery", ["art"])])
     result = discover_places({"interests": ["art"]}, search)
-    assert len(search.calls) == 2  # focused, then wide, then no more
+    # focused, then wide, then one lunch search (no restaurant yet), then no more
+    assert len(search.calls) == 3
     assert "categories" not in search.calls[1] or search.calls[1]["categories"] is None
+    assert search.calls[2]["query"] == "restaurant"
     assert result.status == "INFEASIBLE"
     assert "art" in result.reason
 

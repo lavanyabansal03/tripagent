@@ -45,7 +45,14 @@
     map = instance
     // Keep the map the size of its box when the page layout changes.
     if (typeof ResizeObserver !== 'undefined') {
-      const resizer = new ResizeObserver(() => instance.resize())
+      let refit: ReturnType<typeof setTimeout> | undefined
+      const resizer = new ResizeObserver(() => {
+        instance.resize()
+        // The map may have zoomed to the stops while it was hidden (another tab) or tiny,
+        // which left them squeezed into a corner. Zoom to them again once resizing stops.
+        clearTimeout(refit)
+        refit = setTimeout(update, 150)
+      })
       resizer.observe(container)
       instance.on('remove', () => resizer.disconnect())
     }

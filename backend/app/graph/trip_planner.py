@@ -15,6 +15,7 @@ from app.agents.discovery_plan import plan_with_llm
 from app.agents.planner import build_plan_with_repairs
 from app.agents.repair_choice import choose_with_llm
 from app.config import MAX_CLARIFICATION_ATTEMPTS, MAX_FIND_ATTEMPTS
+from app.tools.routes import add_route_legs
 
 
 class TripState(TypedDict, total=False):
@@ -282,6 +283,26 @@ def build_trip_graph(
                     }
                     for c in choices
                 ],
+            )
+        # Travel time and route for every stop-to-stop leg, now that the plan is final.
+        # A failure only means no route lines; the plan itself is still good.
+        try:
+            leg_count = add_route_legs(itinerary, trip.get("mode", "walking"))
+            sources = sorted({leg["source"] for d in itinerary["days"] for leg in d["legs"]})
+            logs = _log(
+                {**state, "logs": logs},
+                "routes",
+                f"Added travel times for {leg_count} legs",
+                event_type="tool",
+                sources=sources,
+            )
+        except Exception as error:
+            logs = _log(
+                {**state, "logs": logs},
+                "routes",
+                "Travel times between stops failed; the plan has no route lines",
+                event_type="tool",
+                error=str(error),
             )
         validation_logs = _log(
             {**state, "logs": logs},

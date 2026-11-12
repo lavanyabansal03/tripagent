@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t } from './copy/i18n'
-  import { store } from './state/store.svelte'
+  import { store, tripIdFromUrl } from './state/store.svelte'
   import { checkHealth, DEMO_MODE, API_ORIGIN, type HealthStatus } from './api/client'
   import SetupPage from './pages/SetupPage.svelte'
   import UnderstoodPage from './pages/UnderstoodPage.svelte'
@@ -11,11 +11,19 @@
   let theme = $state<'light' | 'dark'>('light')
   let health = $state<HealthStatus | null>(null)
   let checked = $state(false)
+  // After a page refresh the address bar still has ?trip=..., so load that trip
+  // back. Until it is loaded we show nothing, instead of flashing the empty form.
+  const savedTripId = tripIdFromUrl()
+  let restoring = $state(Boolean(savedTripId))
 
   onMount(async () => {
     const stored = localStorage.getItem('tripagent-theme')
     if (stored === 'light' || stored === 'dark') theme = stored
     else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) theme = 'dark'
+
+    if (savedTripId) {
+      store.restoreTrip(savedTripId).finally(() => (restoring = false))
+    }
 
     // Match the skeleton's "Backend: connected" behaviour against /api/health.
     health = await checkHealth()
@@ -88,7 +96,9 @@
 </header>
 
 <main id="main">
-  {#if route.name === 'setup'}
+  {#if restoring}
+    <!-- Loading the trip from the address bar; this takes a moment. -->
+  {:else if route.name === 'setup'}
     <SetupPage />
   {:else if route.name === 'planning'}
     <UnderstoodPage tripId={route.tripId} runId={route.runId} needsClarify={route.needsClarify} />

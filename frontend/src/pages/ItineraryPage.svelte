@@ -338,8 +338,10 @@
     .mobile-hidden {
       display: none;
     }
-    .trace-side {
-      display: none;
+    /* On the Trace tab the plan and map are hidden, so show the trace full width.
+       (It used to stay hidden here too, which left the Trace tab blank.) */
+    .trace-side:not(.mobile-hidden) {
+      display: block;
     }
   }
 

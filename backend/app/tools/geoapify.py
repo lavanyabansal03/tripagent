@@ -44,6 +44,14 @@ CATEGORY_MAP: dict[str, list[str]] = {
     "landmark": ["tourism.attraction", "tourism.sights"],
     "viewpoint": ["tourism.attraction.viewpoint"],
 }
+# Diet words -> Geoapify "conditions" filters (only places OpenStreetMap marks that way).
+DIET_CONDITIONS: dict[str, str] = {
+    "vegetarian": "vegetarian",
+    "vegan": "vegan",
+    "halal": "halal",
+    "kosher": "kosher",
+    "gluten": "gluten_free",  # "gluten-free" is split into "gluten" + "free"
+}
 # Used when the search has no category words ("pike place", or nothing at all).
 DEFAULT_CATEGORIES = [
     "tourism.attraction", "tourism.sights", "catering.cafe", "catering.restaurant",
@@ -67,12 +75,24 @@ EXPERIENCE_PREFIXES = [
 ]
 
 
+def _diet_conditions(query: str) -> list[str]:
+    """Diet words in the query become Geoapify filters: "vegetarian restaurant" -> vegetarian."""
+    conditions: list[str] = []
+    for word in _words(query):
+        condition = DIET_CONDITIONS.get(word)
+        if condition and condition not in conditions:
+            conditions.append(condition)
+    return conditions
+
+
 def _geoapify_categories(query: str, categories: list[str] | None) -> tuple[list[str], list[str]]:
     """Split the request into Geoapify categories and leftover name words.
 
     "coffee museum" -> categories for cafes and museums, no name words.
     "pike place"    -> no category words, so default categories and name words ["pike", "place"].
+    Diet words ("vegetarian") are filters, not names, so they are left out here.
     """
+    query = " ".join(w for w in _words(query) if w not in DIET_CONDITIONS)
     words = [*_words(query), *(w for c in categories or [] for w in _words(c))]
     wanted: list[str] = []
     for word in words:
@@ -167,6 +187,9 @@ class GeoapifyPlaceSearch:
             "limit": 100 if name_words else limit,
             "apiKey": self._api_key,
         }
+        conditions = _diet_conditions(query)
+        if conditions:
+            params["conditions"] = ",".join(conditions)
         # Errors go up to the graph, which retries a few times. httpx error messages contain
         # the full URL (with our API key), so we raise a short message of our own instead
         # and drop the original ("from None") so the key never reaches logs or the browser.

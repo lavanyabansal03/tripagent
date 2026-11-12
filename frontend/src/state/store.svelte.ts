@@ -45,6 +45,24 @@ function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * Keep the trip id in the address bar (?trip=...) so a page refresh can load the
+ * same trip again instead of going back to an empty form. null removes it.
+ */
+export function rememberTripInUrl(tripId: string | null) {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  if (tripId) url.searchParams.set('trip', tripId)
+  else url.searchParams.delete('trip')
+  window.history.replaceState(window.history.state, '', url)
+}
+
+/** The trip id from the address bar, if there is one. */
+export function tripIdFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  return new URL(window.location.href).searchParams.get('trip')
+}
+
 export const store = {
   get trip() {
     return state.trip
@@ -100,6 +118,34 @@ export const store = {
   },
   reset() {
     Object.assign(state, initial)
+    rememberTripInUrl(null)
+  },
+
+  /**
+   * Bring back a trip after a page refresh. Shows the plan if there is one, otherwise
+   * the "Here's what we understood" page. Returns false (and clears the address bar)
+   * when the backend no longer knows the trip.
+   */
+  async restoreTrip(tripId: string): Promise<boolean> {
+    try {
+      const trip = await api.getTrip(tripId)
+      if (!trip) throw new Error('Trip not found')
+      state.trip = trip
+      state.requirements = await api.getRequirements(tripId)
+    } catch {
+      rememberTripInUrl(null)
+      return false
+    }
+    try {
+      await store.reload(tripId)
+    } catch {
+      // No plan yet: the itinerary call fails, which is fine.
+    }
+    state.activeDay = 1
+    state.route = state.itinerary
+      ? { name: 'itinerary' }
+      : { name: 'planning', tripId, runId: '', needsClarify: false }
+    return true
   },
 
   async createTrip(input: TripFormInput) {
@@ -111,6 +157,7 @@ export const store = {
       state.requirements = requirements
       state.itinerary = null
       state.activeDay = 1
+      rememberTripInUrl(trip.id)
       const rec = mockEngine.getTripRecord(trip.id)
       const hasQuestions = Boolean(rec && rec.questions.length)
       state.questionCount = rec?.questions.length ?? 0
