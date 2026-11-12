@@ -48,6 +48,15 @@ def test_runs_are_saved_found_and_updated():
     assert storage.run_id_for_trip("other") is None
 
 
+def test_a_failed_planning_run_is_not_reused():
+    # A failed plan must not block "Try again" (it used to hand back the failure forever).
+    storage.save_run({"run_id": "bad", "trip_id": "t1", "status": "failed", "phase": "done"})
+    assert storage.run_id_for_trip("t1") is None
+
+    storage.save_run({"run_id": "good", "trip_id": "t1", "status": "done", "phase": "done"})
+    assert storage.run_id_for_trip("t1") == "good"
+
+
 def test_trace_keeps_order_and_a_rerun_replaces_it():
     storage.save_trace("t1", "r1", [{"node": "read"}, {"node": "find"}])
     storage.save_trace("t1", "r1", [{"node": "read"}, {"node": "find"}, {"node": "save"}])

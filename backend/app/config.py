@@ -12,6 +12,9 @@ from pydantic_settings import BaseSettings
 # Hard caps for graph loops; keep every retry/clarification path bounded.
 MAX_CLARIFICATION_ATTEMPTS = 2
 MAX_FIND_ATTEMPTS = 3
+# A second "Build my plan" for the same trip waits this long for the first one to
+# finish (then it gets the same run); after that it gets 409.
+PLAN_WAIT_SECONDS = 180
 # L3 loop: repair tries after the first plan (docs/03 5.3, SRS FR-16).
 MAX_REPAIR_ITERATIONS = 3
 # A6 Repair: valid replacements shown to the LLM, and LLM choices per plan.

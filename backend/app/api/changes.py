@@ -12,7 +12,6 @@ plan runs one). A second change at the same time gets 409.
 """
 
 import logging
-import threading
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, Literal
@@ -27,6 +26,7 @@ from app.agents.backup import attach_backups
 from app.agents.change_interpreter import PROTECTED_STATUSES, Interpretation, interpret
 from app.agents.repair_choice import choose_with_llm
 from app.agents.replan import replan
+from app.api.locks import lock_for as _lock_for
 from app.api.trips import (
     ExecutionEvent,
     PlanResponse,
@@ -39,9 +39,6 @@ from app.api.trips import (
 
 router = APIRouter(prefix="/trips", tags=["changes"])
 logger = logging.getLogger(__name__)
-
-_locks: dict[str, threading.Lock] = {}
-_locks_guard = threading.Lock()
 
 
 class ChangeRequest(BaseModel):
@@ -75,11 +72,6 @@ class RestoreResponse(BaseModel):
 
 
 # --- helpers ---------------------------------------------------------------------
-
-
-def _lock_for(trip_id: str) -> threading.Lock:
-    with _locks_guard:
-        return _locks.setdefault(trip_id, threading.Lock())
 
 
 def _current(trip_id: str) -> tuple[dict[str, Any], Trip, TripRequirements, dict[str, Any]]:

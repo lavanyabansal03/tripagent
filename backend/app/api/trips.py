@@ -1,7 +1,8 @@
 """Trip intake, clarification, planning, and trace API endpoints."""
 
 import logging
-from datetime import UTC, datetime
+import re
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -11,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app import storage
 from app.agents.preferences import Preferences
 from app.agents.preferences_reader import read_preferences
+from app.api.locks import lock_for
+from app.config import PLAN_WAIT_SECONDS
 from app.graph.trip_planner import build_trip_graph
 from app.tools.geocode import locate_city
 from app.tools.parallel import run_all
@@ -35,6 +38,20 @@ FormField = Literal[
     "avoid",
     "tourist_local_ratio",
 ]
+
+DATE_FORMAT_ERROR = "Trip dates must use YYYY-MM-DD format"
+_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def parse_trip_date(value: str) -> date:
+    """A trip date, exactly YYYY-MM-DD. Anything else (a time, '20261201') is a ValueError.
+
+    The planner reads these dates later; a time part like '2026-12-01T23:59' used to be
+    accepted here and then crash planning.
+    """
+    if not _DATE_PATTERN.fullmatch(value):
+        raise ValueError(DATE_FORMAT_ERROR)
+    return date.fromisoformat(value)
 
 
 class TripRequest(BaseModel):
@@ -65,10 +82,10 @@ class TripRequest(BaseModel):
     def validate_trip_dates(self) -> "TripRequest":
         if self.start_date or self.end_date:
             try:
-                start = datetime.fromisoformat(self.start_date).date() if self.start_date else None
-                end = datetime.fromisoformat(self.end_date).date() if self.end_date else None
+                start = parse_trip_date(self.start_date) if self.start_date else None
+                end = parse_trip_date(self.end_date) if self.end_date else None
             except ValueError as error:
-                raise ValueError("Trip dates must use YYYY-MM-DD format") from error
+                raise ValueError(DATE_FORMAT_ERROR) from error
             if start is not None and end is not None and end < start:
                 raise ValueError("End date cannot be before start date")
         return self
@@ -364,12 +381,10 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
     candidate_end = updates.get("end_date", requirements.end_date)
     if candidate_start or candidate_end:
         try:
-            start = datetime.fromisoformat(candidate_start).date() if candidate_start else None
-            end = datetime.fromisoformat(candidate_end).date() if candidate_end else None
+            start = parse_trip_date(candidate_start) if candidate_start else None
+            end = parse_trip_date(candidate_end) if candidate_end else None
         except ValueError as error:
-            raise HTTPException(
-                status_code=422, detail="Trip dates must use YYYY-MM-DD format"
-            ) from error
+            raise HTTPException(status_code=422, detail=DATE_FORMAT_ERROR) from error
         if start is not None and end is not None and end < start:
             raise HTTPException(status_code=422, detail="End date cannot be before start date")
 
@@ -402,8 +417,43 @@ def _infeasible_report(result: dict[str, Any], run_status: str) -> dict[str, Any
     }
 
 
+# docs/06 "Unknown failure". True now: the trip is kept and "Try again" plans again.
+PLANNING_CRASHED = "Something went wrong while planning. Your trip is saved. Try again in a moment."
+
+
+def _run_graph(graph_trip: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """Run the planning graph. A crash becomes a normal failed result (end state ERROR).
+
+    Each run gets its own graph thread (the run id), so retry counters from an earlier
+    run of the same trip never carry over, and the thread is deleted afterwards so the
+    server's memory does not grow with every plan.
+    """
+    try:
+        return trip_graph.invoke(
+            {"trip": graph_trip, "logs": [], "run_id": run_id},
+            {"configurable": {"thread_id": run_id}},
+        )
+    except Exception:
+        logger.exception("Planning crashed for trip %s", graph_trip.get("trip_id"))
+        return {"status": "failed", "terminal": "ERROR", "explanation": PLANNING_CRASHED}
+    finally:
+        trip_graph.checkpointer.delete_thread(run_id)
+
+
 @router.post("/{trip_id}/plan", response_model=PlanResponse)
 def plan_trip(trip_id: str) -> PlanResponse:
+    """Plan the trip once. A second request while it runs (a double click) waits for the
+    first and gets the same run, instead of planning twice and crashing on version 1."""
+    lock = lock_for(trip_id)
+    if not lock.acquire(timeout=PLAN_WAIT_SECONDS):
+        raise HTTPException(status_code=409, detail="This trip is already being planned")
+    try:
+        return _plan_once(trip_id)
+    finally:
+        lock.release()
+
+
+def _plan_once(trip_id: str) -> PlanResponse:
     record = _load(trip_id)
     trip = Trip.model_validate(record["trip"])
     requirements = TripRequirements.model_validate(record["requirements"])
@@ -425,10 +475,7 @@ def plan_trip(trip_id: str) -> PlanResponse:
     _save(trip, requirements, questions, rounds, False)
     graph_trip = requirements.model_dump()
     graph_trip["trip_id"] = trip_id
-    result = trip_graph.invoke(
-        {"trip": graph_trip, "logs": [], "run_id": run_id},
-        {"configurable": {"thread_id": trip_id}},
-    )
+    result = _run_graph(graph_trip, run_id)
     succeeded = result.get("status") in ("completed", "infeasible")
     run_status: Literal["done", "failed", "infeasible"] = (
         "infeasible"

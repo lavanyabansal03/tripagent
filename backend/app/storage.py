@@ -214,11 +214,16 @@ def get_run(run_id: str) -> dict[str, Any] | None:
 
 
 def run_id_for_trip(trip_id: str) -> str | None:
-    """The trip's planning run, if it already has one (change runs are left out)."""
+    """The trip's planning run, if it already has one that did not fail.
+
+    Change runs are left out. A failed run is left out too, so "Try again" plans again
+    instead of handing back the same failure forever.
+    """
     with engine().connect() as db:
         rows = db.execute(select(runs.c.id, runs.c.run).where(runs.c.trip_id == trip_id)).all()
     for run_id, run in rows:
-        if (run or {}).get("phase") != "adapt":
+        run = run or {}
+        if run.get("phase") != "adapt" and run.get("status") != "failed":
             return run_id
     return None
 
