@@ -22,6 +22,13 @@ from app.tools.geocode import KNOWN_CITIES, locate_city
 from app.tools.mock_places import MockPlaceSearch, distance_km
 
 
+class TripProblem(RuntimeError):
+    """A problem the traveller must fix (unknown destination, no places found).
+
+    Retrying will not help, so the graph stops at once and shows the message as written.
+    """
+
+
 class TripState(TypedDict, total=False):
     trip: dict[str, Any]
     places: list[dict[str, str]]
@@ -34,6 +41,7 @@ class TripState(TypedDict, total=False):
     status: str
     explanation: str
     find_error: str
+    find_problem: bool  # True: a TripProblem; explain it, do not retry
     save_error: str
     run_id: str
     itinerary: dict[str, Any]
@@ -181,14 +189,15 @@ def _discover(
         location = locate_city(str(trip.get("destination", "")))
         center = {"lat": location.lat, "lng": location.lng} if location else None
     if center is None:
-        raise RuntimeError(
-            f"We could not find the destination {trip.get('destination')!r}. "
-            "Please check the spelling, or add the country (for example 'Paris, France')."
+        raise TripProblem(
+            f"We could not find the destination {trip.get('destination')!r} in the United "
+            "States. TripAgent plans US trips for now; please check the spelling or add "
+            "the state (for example 'Portland, Maine')."
         )
     near = LatLng(lat=center["lat"], lng=center["lng"])
     search = get_place_search()
     if isinstance(search, MockPlaceSearch) and distance_km(SEATTLE, near.lat, near.lng) > 80:
-        raise RuntimeError(
+        raise TripProblem(
             "Demo mode only has places in Seattle. Plan a Seattle trip, or turn on live "
             "mode (DEMO_MODE=false with a Geoapify key) for other cities."
         )
@@ -204,6 +213,12 @@ def _discover(
     result = discover_places(trip, search=search, plan=timed_plan, near=near)
     if result.status == "ERROR":
         raise RuntimeError(result.reason)  # find_places retries, then explains the failure
+    if not result.places:
+        where = trip.get("location_name") or trip.get("destination")
+        raise TripProblem(
+            f"We couldn't find any places near {where} for these interests. "
+            "Check the destination, or try broader interests."
+        )
     places = [place.model_dump(mode="json") for place in result.places]
     return places, result.search_words, plan_ms[0]
 
@@ -234,6 +249,7 @@ def _find_places(
             "places": places,
             "find_attempts": attempt,
             "find_error": "",
+            "find_problem": False,
             "logs": _log(
                 {**state, "logs": logs},
                 "find",
@@ -246,6 +262,7 @@ def _find_places(
         return {
             "find_attempts": attempt,
             "find_error": str(error),
+            "find_problem": isinstance(error, TripProblem),
             "logs": _log(state, "find", "Place search failed", attempt=attempt, error=str(error)),
         }
 
@@ -253,7 +270,7 @@ def _find_places(
 def _after_find(state: TripState) -> str:
     if not state.get("find_error"):
         return "save_trip"
-    if state.get("find_attempts", 0) >= MAX_FIND_ATTEMPTS:
+    if state.get("find_problem") or state.get("find_attempts", 0) >= MAX_FIND_ATTEMPTS:
         return "explain_failure"
     return "find_places"
 
@@ -263,6 +280,8 @@ def _explain_failure(state: TripState) -> dict[str, Any]:
         explanation = (
             "I couldn't continue because the trip dates are still missing after two questions."
         )
+    elif state.get("find_problem"):
+        explanation = state["find_error"]  # already written for the traveller
     else:
         failed_step = "place search" if state.get("find_error") else "saving the trip"
         attempts = state.get("find_attempts", 0) or state.get("save_attempts", 0)

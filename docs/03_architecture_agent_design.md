@@ -550,6 +550,8 @@ The budget validator checks the sum of upper-bound estimates against the budget 
 
 **Consequences:** OpenStreetMap has no ratings, review counts or prices, so those stay `None` ("unknown"), and the tourist/local signals in ADR-003 fall back to "Unknown" where they need ratings. Opening hours are converted from OpenStreetMap text into `OpeningPeriod` only when the text can be read fully. One optional key: `GEOAPIFY_API_KEY`.
 
+**Update (November 12, 2026): US destinations only for now.** The destination is looked up with Geoapify geocoding filtered to `ALLOWED_COUNTRIES = ["us"]` (`backend/app/config.py`). A street or neighbourhood with the same word ("Goa Way", "Little Tokyo") is not accepted. A city outside the USA ends the run with a clear message ("We could not find the destination … in the United States"), and so does a run where no places were found. Neither is retried. To allow more countries later, add their codes to `ALLOWED_COUNTRIES` and cities to the built-in list in `backend/app/tools/geocode.py`.
+
 ## 12. Reliability, Observability and Security
 
 | Concern | Design |

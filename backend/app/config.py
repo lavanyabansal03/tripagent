@@ -22,6 +22,9 @@ MAX_DELAY_MINUTES = 600
 MAX_REASON_CHARS = 200
 # Discovery agent: the most place searches it may make for one trip.
 MAX_DISCOVERY_CALLS = 8
+# Countries TripAgent plans trips in (ISO codes, lower case). USA only for now;
+# add codes here to allow more countries.
+ALLOWED_COUNTRIES = ["us"]
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15

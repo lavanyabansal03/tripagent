@@ -182,6 +182,8 @@ export const store = {
       }
       if (status.status === 'failed') {
         state.error = status.message ?? 'errors.unknown'
+        // Show why in the "couldn't plan" notice (for example "We couldn't find any places").
+        state.infeasible = status.infeasible ?? null
         break
       }
       if (status.status === 'needs-user') break

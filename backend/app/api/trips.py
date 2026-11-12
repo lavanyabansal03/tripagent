@@ -163,6 +163,9 @@ class RunStatus(BaseModel):
     terminal: Literal["PASS", "INFEASIBLE", "NEEDS_USER", "ERROR"] | None
     message: str | None = None
     started_at: str
+    # When a plan could not be made: what blocked it, in the shape the website's
+    # "couldn't plan" notice reads (InfeasibleReport).
+    infeasible: dict[str, Any] | None = None
 
 
 # Trips, versions, runs and traces are saved in the database (app/storage.py, ADR-005).
@@ -383,6 +386,22 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
     return requirements
 
 
+def _infeasible_report(result: dict[str, Any], run_status: str) -> dict[str, Any] | None:
+    """Why no usable plan was made, for the website; None when the plan is fine."""
+    if run_status == "done":
+        return None
+    hard = [
+        check["rule"]
+        for check in result.get("validation", [])
+        if not check.get("passed") and check.get("severity") == "hard"
+    ]
+    return {
+        "blocking_rule": hard[0] if hard else "error",
+        "explanation": result.get("explanation") or "We couldn't finish planning.",
+        "suggestions": [],
+    }
+
+
 @router.post("/{trip_id}/plan", response_model=PlanResponse)
 def plan_trip(trip_id: str) -> PlanResponse:
     record = _load(trip_id)
@@ -429,6 +448,7 @@ def plan_trip(trip_id: str) -> PlanResponse:
         terminal=result.get("terminal") or ("PASS" if succeeded else "ERROR"),
         message=result.get("explanation") or None,
         started_at=started_at,
+        infeasible=_infeasible_report(result, run_status),
     )
     if succeeded:
         itinerary = result.get("itinerary", {})
