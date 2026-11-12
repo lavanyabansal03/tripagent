@@ -117,6 +117,16 @@ def test_rejects_original_place():
     assert results[0]["backups"] == []
 
 
+def test_rejects_the_same_place_listed_again():
+    # Seen live: "The High Line" was offered as the backup for The High Line.
+    copy = make_place("other-id", "original  coffee shop", ["cafe"], 10)
+    different = make_place("backup1", "Alternative Coffee Shop", ["cafe"], 10)
+
+    results = find_backups(make_plan(), FakePlaceSearch([copy, different]))
+
+    assert [b["place_id"] for b in results[0]["backups"]] == ["backup1"]
+
+
 def test_rejects_wrong_purpose():
     candidate = make_place("museum1", "Art Museum", ["culture"])
 
