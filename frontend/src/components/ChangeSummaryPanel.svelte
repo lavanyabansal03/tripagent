@@ -42,11 +42,16 @@
     kept: all.filter((a) => a.change_type === 'kept' || a.change_type === null || a.change_type === undefined),
   })
 
-  // Activities removed in the previous version (not present now).
+  // Activities removed by this change. The backend's diff names them exactly; a replaced
+  // activity's old place is NOT a removal (it used to be listed twice).
   const removed = $derived(
     (previous?.days ?? [])
       .flatMap((d) => d.activities)
-      .filter((a) => !all.some((now) => now.place_id === a.place_id)),
+      .filter((a) =>
+        replan?.diff?.removed
+          ? replan.diff.removed.includes(a.id)
+          : !all.some((now) => now.place_id === a.place_id),
+      ),
   )
 
   const trigger = $derived(replan?.trigger_text ?? 'something changed')

@@ -4,10 +4,23 @@ import {
   formatMoney,
   formatPlaceTime,
   formatRelativeWhen,
+  formatTripDate,
   isStale,
   resolvePluralForTest,
   t,
 } from './i18n'
+
+describe('formatTripDate', () => {
+  it('shows trip days as US dates (mm/dd/yyyy)', () => {
+    expect(formatTripDate('2026-11-27')).toBe('11/27/2026')
+    expect(formatTripDate('2026-12-05')).toBe('12/05/2026')
+    expect(formatTripDate('2027-01-01')).toBe('01/01/2027') // no shift to the day before
+  })
+
+  it('leaves text that is not a date as it is', () => {
+    expect(formatTripDate('soon')).toBe('soon')
+  })
+})
 
 describe('i18n', () => {
   it('interpolates named placeholders', () => {

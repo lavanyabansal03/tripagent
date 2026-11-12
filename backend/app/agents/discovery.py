@@ -13,6 +13,7 @@ in a named state:
   ERROR       every search call failed
 """
 
+import logging
 from collections.abc import Callable
 from datetime import date
 from difflib import SequenceMatcher
@@ -25,11 +26,16 @@ from app.config import MAX_DISCOVERY_CALLS
 from app.tools import PlaceSearch, get_place_search
 from app.tools.base import LatLng
 from app.tools.mock_places import distance_km
+from app.tools.parallel import run_all
 from app.tools.place import Place
+
+logger = logging.getLogger(__name__)
 
 MIN_PER_INTEREST = 3
 SAME_NAME_SIMILARITY = 0.85
 SAME_PLACE_KM = 0.05  # 50 metres
+# Exactly the same name this close is one place listed twice (a park and its playground).
+SAME_NAME_KM = 1.0
 RESULTS_PER_SEARCH = 10
 RESULTS_FOR_ANYTHING = 30  # a search with no interest returns a bigger mix
 
@@ -44,12 +50,14 @@ class DiscoveryResult(BaseModel):
 
 
 def _same_place(a: Place, b: Place) -> bool:
-    """Same id, or nearly the same name within 50 m (one cafe listed twice)."""
+    """Same id; nearly the same name within 50 m; or exactly the same name within 1 km."""
     if a.id == b.id:
         return True
+    km = distance_km(LatLng(lat=a.lat, lng=a.lng), b.lat, b.lng)
+    if " ".join(a.name.lower().split()) == " ".join(b.name.lower().split()) and km < SAME_NAME_KM:
+        return True
     similarity = SequenceMatcher(None, a.name.lower(), b.name.lower()).ratio()
-    close = distance_km(LatLng(lat=a.lat, lng=a.lng), b.lat, b.lng) < SAME_PLACE_KM
-    return similarity >= SAME_NAME_SIMILARITY and close
+    return similarity >= SAME_NAME_SIMILARITY and km < SAME_PLACE_KM
 
 
 def _add(found: list[Place], place: Place) -> tuple[Place, bool]:
@@ -85,6 +93,17 @@ def _mix(per_interest: dict[str, list[str]], found: list[Place]) -> list[Place]:
     return [by_id[place_id] for place_id in ordered]
 
 
+def famous_first(famous: list[Place], others: list[Place]) -> list[Place]:
+    """Famous places first, then the rest; a place found both ways is kept once.
+
+    The planner uses the first places in the list, so the famous ones get into the plan.
+    """
+    found: list[Place] = []
+    for place in [*famous, *others]:
+        _add(found, place)
+    return found
+
+
 def _trip_days(trip: dict[str, Any]) -> int:
     try:
         start = date.fromisoformat(str(trip["start_date"]))
@@ -102,6 +121,7 @@ def _add_lunch_spots(
     calls: int,
     failures: int,
     max_calls: int,
+    near: LatLng | None = None,
 ) -> tuple[int, int]:
     """Every day needs lunch. If the interests did not bring a restaurant for each day,
     search for some (vegetarian ones when the traveller said so). Uses at most 2 calls and
@@ -120,7 +140,8 @@ def _add_lunch_spots(
         calls += 1
         try:
             results = search.search_places(
-                query=query, categories=["restaurant"], mode=mode, limit=RESULTS_PER_SEARCH
+                near=near, query=query, categories=["restaurant"], mode=mode,
+                limit=RESULTS_PER_SEARCH,
             )
         except Exception:
             failures += 1
@@ -137,6 +158,7 @@ def discover_places(
     search: PlaceSearch | None = None,
     max_calls: int = MAX_DISCOVERY_CALLS,
     plan: Callable[[dict[str, Any], list[str]], dict[str, list[str]]] | None = None,
+    near: LatLng | None = None,
 ) -> DiscoveryResult:
     """Find candidate places for the trip's interests within a fixed number of searches.
 
@@ -151,8 +173,9 @@ def discover_places(
     if plan is not None and interests != [""]:
         try:
             search_words = plan(trip, interests) or {}
-        except Exception:
-            search_words = {}  # no plan: search the interests as written
+        except Exception as error:  # no plan: search the interests as written
+            logger.warning("Search plan failed (%s); searching the interests as written", error)
+            search_words = {}
 
     found: list[Place] = []
     per_interest: dict[str, list[str]] = {interest: [] for interest in interests}
@@ -160,7 +183,25 @@ def discover_places(
     hit_cap = False
 
     # Step 1 is a focused search for every interest; step 2 a wider one for those still short.
+    # The searches of one step run at the same time; their results are used in order.
+    def focused(interest: str) -> Callable[[], list[Place]]:
+        if search_words.get(interest):
+            return lambda: search.search_places(
+                near=near, query="", categories=search_words[interest], mode=mode,
+                limit=RESULTS_PER_SEARCH,
+            )
+        return lambda: search.search_places(
+            near=near, query=interest, categories=[interest] if interest else None, mode=mode,
+            limit=RESULTS_PER_SEARCH if interest else RESULTS_FOR_ANYTHING,
+        )
+
+    def wide(interest: str) -> Callable[[], list[Place]]:
+        return lambda: search.search_places(
+            near=near, query=interest, mode=mode, limit=RESULTS_PER_SEARCH * 2
+        )
+
     for step in ("focused", "wide"):
+        batch: list[str] = []
         for interest in interests:
             if len(per_interest[interest]) >= MIN_PER_INTEREST:
                 continue
@@ -170,26 +211,10 @@ def discover_places(
                 hit_cap = True
                 break
             calls += 1
-            try:
-                if step == "focused" and search_words.get(interest):
-                    results = search.search_places(
-                        query="",
-                        categories=search_words[interest],
-                        mode=mode,
-                        limit=RESULTS_PER_SEARCH,
-                    )
-                elif step == "focused":
-                    results = search.search_places(
-                        query=interest,
-                        categories=[interest] if interest else None,
-                        mode=mode,
-                        limit=RESULTS_PER_SEARCH if interest else RESULTS_FOR_ANYTHING,
-                    )
-                else:
-                    results = search.search_places(
-                        query=interest, mode=mode, limit=RESULTS_PER_SEARCH * 2
-                    )
-            except Exception:  # one failed call should not end the whole search
+            batch.append(interest)
+        make = focused if step == "focused" else wide
+        for interest, results in zip(batch, run_all([make(i) for i in batch]), strict=True):
+            if isinstance(results, Exception):  # one failed call should not end the search
                 failures += 1
                 continue
             for result in results:
@@ -201,12 +226,15 @@ def discover_places(
     if not found and interests != [""] and calls < max_calls:
         calls += 1
         try:
-            for result in search.search_places(mode=mode, limit=RESULTS_FOR_ANYTHING):
+            for result in search.search_places(near=near, mode=mode, limit=RESULTS_FOR_ANYTHING):
                 _add(found, result)
-        except Exception:
+        except Exception as error:
+            logger.warning("Last-resort place search failed: %s", error)
             failures += 1
 
-    calls, failures = _add_lunch_spots(trip, search, found, mode, calls, failures, max_calls)
+    calls, failures = _add_lunch_spots(
+        trip, search, found, mode, calls, failures, max_calls, near=near
+    )
 
     coverage = {interest: len(ids) for interest, ids in per_interest.items()}
     short = [interest or "anything" for interest, n in coverage.items() if n < MIN_PER_INTEREST]

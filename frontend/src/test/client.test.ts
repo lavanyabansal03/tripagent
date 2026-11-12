@@ -46,3 +46,27 @@ describe('live API client', () => {
     expect(JSON.parse(init.body)).toEqual(form)
   })
 })
+
+describe('live API client changes', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+  })
+
+  it('sends the day on screen with a change', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ run_id: 'r1', change: {} }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { api, CHANGES_AVAILABLE } = await loadLiveClient()
+
+    await api.submitChange('t1', { text: "I'm 90 minutes late", day: 2 })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/trips/t1/changes')
+    expect(JSON.parse(init.body)).toEqual({ text: "I'm 90 minutes late", day: 2 })
+    expect(CHANGES_AVAILABLE).toBe(true)
+  })
+})

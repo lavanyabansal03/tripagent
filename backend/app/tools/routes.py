@@ -7,14 +7,15 @@ estimate in DEMO_MODE or when a provider fails. Each leg says which one in `sour
 """
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any
 
+from app.config import PARALLEL_SEARCHES, ROUTES_TIME_LIMIT_S
 from app.tools.base import LatLng, Mode
-from app.tools.travel_time import TravelTime, travel_minutes
+from app.tools.travel_time import TravelTime, estimate_minutes, travel_minutes
 
 # A few legs at a time keeps planning fast without hammering the free providers.
-MAX_PARALLEL_CALLS = 4
+MAX_PARALLEL_CALLS = PARALLEL_SEARCHES
 
 Travel = Callable[[LatLng, LatLng, Mode], TravelTime]
 
@@ -43,11 +44,16 @@ def _leg(first: dict[str, Any], second: dict[str, Any], mode: Mode, time: Travel
 
 
 def add_route_legs(
-    itinerary: dict[str, Any], mode: Mode = "walking", travel: Travel = travel_minutes
+    itinerary: dict[str, Any],
+    mode: Mode = "walking",
+    travel: Travel = travel_minutes,
+    time_limit_s: float = ROUTES_TIME_LIMIT_S,
 ) -> int:
     """Fill every day's `legs` in place and return how many legs were added.
 
     Pairs where a place has no map position are skipped (we never guess a location).
+    The whole step has a time limit: a leg whose provider has not answered by then gets
+    the rough estimate (source "estimate"). Seen live: transit for 27 legs took 48 s.
     """
     pairs: list[tuple[dict, dict, dict]] = []  # (day, first activity, next activity)
     for day in itinerary.get("days", []):
@@ -61,8 +67,22 @@ def add_route_legs(
         _, first, second = pair
         return travel(_point(first), _point(second), mode)
 
-    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_CALLS) as pool:
-        times = list(pool.map(measure, pairs))  # same order as `pairs`
+    def rough(pair: tuple[dict, dict, dict]) -> TravelTime:
+        _, first, second = pair
+        return estimate_minutes(_point(first), _point(second), mode)
+
+    times: list[TravelTime] = []
+    if pairs:
+        pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL_CALLS)
+        futures = [pool.submit(measure, pair) for pair in pairs]
+        wait(futures, timeout=time_limit_s)
+        for pair, future in zip(pairs, futures, strict=True):  # same order as `pairs`
+            if future.done() and future.exception() is None:
+                times.append(future.result())
+            else:
+                times.append(rough(pair))  # too slow, or failed: the estimate
+        # Do not wait for slow providers; their own timeout ends those threads.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     for (day, first, second), time in zip(pairs, times):
         day["legs"].append(_leg(first, second, mode, time))

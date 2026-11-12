@@ -4,13 +4,9 @@ from pathlib import Path
 import pytest
 from google.genai import errors
 
-from app.agents import preferences as preferences_agent
-from app.agents.preferences import (
-    MAX_TRIES,
-    Preferences,
-    call_with_retry,
-    extract_preferences,
-)
+from app.agents import llm
+from app.agents.llm import MAX_TRIES, call_with_retry
+from app.agents.preferences import Preferences, extract_preferences
 from app.config import GEMINI_TIMEOUT_SECONDS, settings
 
 EXPECTED_FILE = Path(__file__).with_name("preferences_expected.json")
@@ -90,7 +86,7 @@ def test_gemini_call_has_a_time_limit(monkeypatch):
             self.models = FakeModels()
 
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", "test-key")
-    monkeypatch.setattr(preferences_agent.genai, "Client", FakeClient)
+    monkeypatch.setattr(llm.genai, "Client", FakeClient)
 
     result = extract_preferences("I love coffee.")
 

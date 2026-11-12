@@ -17,11 +17,27 @@ MAX_REPAIR_ITERATIONS = 3
 # A6 Repair: valid replacements shown to the LLM, and LLM choices per plan.
 REPAIR_OPTIONS_FOR_LLM = 4
 MAX_REPAIR_LLM_CALLS = 5
+# L4 changes: the longest delay A5 accepts, and the longest A7 reason per activity.
+MAX_DELAY_MINUTES = 600
+MAX_REASON_CHARS = 200
 # Discovery agent: the most place searches it may make for one trip.
 MAX_DISCOVERY_CALLS = 8
+# Countries TripAgent plans trips in (ISO codes, lower case). USA only for now;
+# add codes here to allow more countries.
+ALLOWED_COUNTRIES = ["us"]
+# A2 famous places: the most names the LLM may suggest (each is one map lookup, or two).
+MAX_FAMOUS_PLACES = 12
+# Planner: most stops in one day for each pace, counting the lunch stop (the 09:00-20:00
+# day still decides whether they all fit).
+STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 5}
+# Travel times between stops: the longest the whole step may take; slower legs get the
+# rough estimate (transit lookups can take 5-10 s each).
+ROUTES_TIME_LIMIT_S = 10
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15
+# Place searches that may run at the same time (they only wait on the network).
+PARALLEL_SEARCHES = 6
 
 # LLM calls (Gemini and NVIDIA): tries per call on 429/503, i.e. 2 retries, then the
 # other LLM is the fallback (docs/03 L6 "2 retries + 1 fallback").
@@ -38,13 +54,16 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.8-flash"
-    # Backup LLM (NVIDIA Nemotron) for when Gemini is busy or failing. Optional.
-    # Model names change; check build.nvidia.com and override in .env if needed.
+    # gemini-3.8-flash / 3.7-flash kept answering 503 "high demand" on the free
+    # tier (checked 2026-11-11); 3.5-flash answered every time, in about 1s.
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+    # NVIDIA Nemotron (build.nvidia.com). Model names change; check the site and
+    # override in .env if needed.
     NVIDIA_API_KEY: str = ""
     NVIDIA_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    # Which LLM to try first: "gemini" (default) or "nvidia". The other is the backup.
-    LLM_PRIMARY: Literal["gemini", "nvidia"] = "gemini"
+    # Which LLM to try first: "nvidia" (default, the more reliable one) or
+    # "gemini". The other is the backup (ADR-009).
+    LLM_PRIMARY: Literal["gemini", "nvidia"] = "nvidia"
     MAPBOX_SECRET_TOKEN: str = ""
     # Place search (free plan, no card). Used only when DEMO_MODE is false.
     GEOAPIFY_API_KEY: str = ""

@@ -123,6 +123,20 @@ def test_nvidia_answer_that_breaks_the_schema_is_rejected(nvidia_key, monkeypatc
         preferences_reader.read_with_nvidia("cheap trip")
 
 
+def test_nvidia_null_means_not_stated(nvidia_key, monkeypatch):
+    # Seen live: {"avoid": null} failed the whole note, so nothing from it was used.
+    monkeypatch.setattr(
+        preferences_reader,
+        "ask_nvidia_for_json",
+        lambda _p, _s: {"interests": ["pizza"], "avoid": None, "budget_max": None},
+    )
+
+    result = preferences_reader.read_with_nvidia("pizza please")
+
+    assert result.interests == ["pizza"]
+    assert result.avoid == [] and result.budget_max is None
+
+
 # --- Order: primary first, backup second ------------------------------------
 
 

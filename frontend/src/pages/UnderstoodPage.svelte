@@ -4,7 +4,7 @@
    * preference review, then the RunProgress while the graph runs.
    */
   import { onMount } from 'svelte'
-  import { t, formatMoney } from '../copy/i18n'
+  import { t, formatMoney, formatTripDate } from '../copy/i18n'
   import type { Provenance } from '../types'
   import { mockEngine } from '../api/client'
   import { store } from '../state/store.svelte'
@@ -124,13 +124,18 @@
       <h1 id="understood-title">{t('understood.sectionTitle')}</h1>
       {#if store.trip}
         <p class="summary">
-          {store.trip.destination} · {store.trip.start_date} – {store.trip.end_date}
+          {store.trip.destination} · {formatTripDate(store.trip.start_date)} – {formatTripDate(store.trip.end_date)}
         </p>
       {/if}
       <PreferenceChips {chips} />
-      <button type="button" class="primary" onclick={startPlan}>
-        {t('setup.primaryCta')}
-      </button>
+      <div class="actions">
+        <button type="button" class="secondary" onclick={() => store.editTrip()}>
+          {t('understood.editTrip')}
+        </button>
+        <button type="button" class="primary" onclick={startPlan}>
+          {t('setup.primaryCta')}
+        </button>
+      </div>
     </section>
   </div>
 {/if}
@@ -159,6 +164,21 @@
     margin: 0;
     color: var(--color-text-muted);
     font-size: var(--text-sm);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .secondary {
+    background: transparent;
+    color: var(--color-brand);
+    border: 1px solid var(--color-brand);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
   }
   .primary {
     align-self: flex-start;

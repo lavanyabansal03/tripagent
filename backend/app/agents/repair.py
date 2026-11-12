@@ -14,11 +14,12 @@ travel time between stops, and over budget. Soft problems are not repaired;
 they are shown to the user (docs/03 section 5.3).
 """
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from typing import Any
 
-from app.config import REPAIR_OPTIONS_FOR_LLM
+from app.config import MAX_REASON_CHARS, REPAIR_OPTIONS_FOR_LLM
 from app.tools.base import LatLng
 from app.tools.mock_places import distance_km
 from app.validation.avoid import check_avoid_list
@@ -26,6 +27,8 @@ from app.validation.budget import check_budget
 from app.validation.opening_hours import check_opening_hours
 from app.validation.overlap import check_overlap
 from app.validation.travel_time import check_travel_time
+
+logger = logging.getLogger(__name__)
 
 PROTECTED_STATUSES = {"done", "locked", "cancelled"}
 
@@ -58,10 +61,12 @@ def repair_itinerary(
     Without `choose`, or if it gives no valid answer, the first valid one is used.
     """
     repair = _Repair(trip, itinerary, places, choose)
+    repair.fix_unavailable_places()  # reported closed today (a change during the trip)
     repair.fix_closed_places()
     repair.fix_avoid_list()
     repair.fix_overlaps()
     repair.fix_travel_time()
+    repair.fix_day_end()  # pushed past the end of the day (for example after a delay)
     repair.fix_budget()
     return repair.changes
 
@@ -81,7 +86,24 @@ class _Repair:
             change["old_place_id"] for change in itinerary.get("repairs", [])
         }
 
-    # --- the five problems -------------------------------------------------
+    # --- the problems ------------------------------------------------------
+
+    def fix_unavailable_places(self) -> None:
+        for day, activity in self._editable():
+            if activity.get("unavailable"):
+                self._replace_or_remove(day, activity, "closure", "It is closed today.")
+
+    def fix_day_end(self) -> None:
+        """Remove activities that no longer end before the day's end (nothing to swap in)."""
+        for day, activity in self._editable():
+            start = datetime.fromisoformat(activity["start"])
+            end = datetime.fromisoformat(activity["end"])
+            if end.timetz().replace(tzinfo=None) > self._daily_end() or end.date() > start.date():
+                day["activities"].remove(activity)
+                self._record(
+                    activity, "removed", "day_end", "It no longer fits in the day.",
+                    activity["place"], None,
+                )
 
     def fix_closed_places(self) -> None:
         for day, activity in self._editable():
@@ -171,6 +193,7 @@ class _Repair:
                 "backups": [],  # the old place's backups no longer apply
             }
         )
+        activity.pop("unavailable", None)  # the new place is not the closed one
         self._record(activity, "replaced", rule, reason, old_place, replacement)
         self.changes[-1].update({"chosen_by": chosen_by, "why": why, "options": len(options)})
 
@@ -180,12 +203,13 @@ class _Repair:
             return options[0], "rule", None
         try:
             answer = self.choose(self.trip, activity, options, problem)
-        except Exception:
+        except Exception as error:  # the rule-based choice below still works
+            logger.warning("LLM repair choice failed (%s); using the first valid option", error)
             answer = None
         if answer is not None:
             index, why = answer
             if isinstance(index, int) and 0 <= index < len(options):
-                return options[index], "llm", (why or "").strip()[:200] or None
+                return options[index], "llm", (why or "").strip()[:MAX_REASON_CHARS] or None
         return options[0], "rule-fallback", None
 
     def _move_after(self, day, first, second) -> None:

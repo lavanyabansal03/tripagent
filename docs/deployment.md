@@ -44,7 +44,7 @@ Backend (`tripagent-api-lavanyabansal03`):
 | `DEMO_MODE` | `true` until live providers are wired |
 | `CORS_ORIGINS` | `*` (no cookies/auth). Tighten to the frontend URL later |
 | `GOOGLE_API_KEY`, `NVIDIA_API_KEY`, `MAPBOX_SECRET_TOKEN`, `GEOAPIFY_API_KEY` | optional; set to leave demo mode |
-| `LLM_PRIMARY` | optional: `gemini` (default) or `nvidia`, which LLM goes first |
+| `LLM_PRIMARY` | optional: `nvidia` (default) or `gemini`, which LLM goes first |
 | `DATABASE_URL` | **secret**: the Postgres connection string from Neon. Empty -> a SQLite file, which Render wipes on every restart |
 
 Frontend (`tripagent-web-lavanyabansal03`):

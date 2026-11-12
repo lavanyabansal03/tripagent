@@ -15,6 +15,7 @@ from app.config import BACKUPS_PER_ACTIVITY, MAX_BACKUP_SEARCHES
 from app.tools import get_place_search
 from app.tools.base import LatLng
 from app.tools.mock_places import distance_km, rough_minutes
+from app.tools.parallel import run_all
 from app.validation.avoid import check_avoid_list
 from app.validation.budget import check_budget
 from app.validation.opening_hours import check_opening_hours
@@ -316,6 +317,7 @@ def find_backups(
     searches = 0
 
     results = []
+    jobs = []  # (activity, result, purpose, original) that need a place search
 
     for activity in activities:
         if only_ids is not None and activity.get("id") not in only_ids:
@@ -351,16 +353,23 @@ def find_backups(
             continue
 
         searches += 1
-        try:
-            candidates = search.search_places(
-                query="",
-                near=LatLng(lat=original["lat"], lng=original["lng"]),
-                categories=purpose,
-                radius_min=radius_min,
-                mode=mode,
-                limit=20,
-            )
-        except Exception:  # a provider error must not stop the plan
+        jobs.append((activity, result, purpose, original))
+
+    # All searches run at the same time; the checks below stay one by one, in order.
+    def search_near(original, purpose):
+        return lambda: search.search_places(
+            query="",
+            near=LatLng(lat=original["lat"], lng=original["lng"]),
+            categories=purpose,
+            radius_min=radius_min,
+            mode=mode,
+            limit=20,
+        )
+
+    answers = run_all([search_near(original, purpose) for _, _, purpose, original in jobs])
+
+    for (activity, result, purpose, original), candidates in zip(jobs, answers, strict=True):
+        if isinstance(candidates, Exception):  # a provider error must not stop the plan
             result["reason"] = "Place search could not be completed."
             continue
 

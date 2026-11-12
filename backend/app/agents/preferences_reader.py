@@ -5,13 +5,12 @@ other one is tried. If both fail, the answer is None and the trip is created
 from the form alone.
 """
 
-import logging
+from functools import partial
 
+from app.agents.llm import first_answer
 from app.agents.nvidia_llm import ask_nvidia_for_json
 from app.agents.preferences import Preferences, build_prompt, extract_preferences
 from app.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 def read_with_gemini(note: str) -> Preferences | None:
@@ -22,6 +21,10 @@ def read_with_nvidia(note: str) -> Preferences | None:
     if not settings.NVIDIA_API_KEY:
         return None
     answer = ask_nvidia_for_json(build_prompt(note), Preferences.model_json_schema())
+    # Seen live: NVIDIA sometimes answers "avoid": null for "nothing to avoid". A null
+    # field means "not stated", which is each field's default (empty list or None).
+    if isinstance(answer, dict):
+        answer = {key: value for key, value in answer.items() if value is not None}
     return Preferences.model_validate(answer)
 
 
@@ -30,13 +33,4 @@ READERS = {"gemini": read_with_gemini, "nvidia": read_with_nvidia}
 
 def read_preferences(note: str) -> Preferences | None:
     """Try the primary LLM, then the backup. None if neither gives an answer."""
-    backup = "nvidia" if settings.LLM_PRIMARY == "gemini" else "gemini"
-    for name in (settings.LLM_PRIMARY, backup):
-        try:
-            result = READERS[name](note)
-        except Exception:
-            logger.warning("%s could not read the trip note; trying the next LLM", name)
-            continue
-        if result is not None:
-            return result
-    return None
+    return first_answer({name: partial(read, note) for name, read in READERS.items()})

@@ -4,9 +4,9 @@
    * Desktop: day tabs + validation + activity list on the left, map on the
    * right, Adjust trip and Trace in the header. Mobile: Plan | Map | Trace tabs.
    */
-  import { t } from '../copy/i18n'
+  import { formatTripDate, t } from '../copy/i18n'
   import type { ChangeEvent, Place } from '../types'
-  import { CHANGES_AVAILABLE, mockEngine } from '../api/client'
+  import { CHANGES_AVAILABLE, DEMO_MODE } from '../api/client'
   import { store } from '../state/store.svelte'
   import ActivityCard from '../components/ActivityCard.svelte'
   import AdjustTripDialog from '../components/AdjustTripDialog.svelte'
@@ -28,11 +28,8 @@
   const days = $derived(itinerary?.days ?? [])
   const activeDay = $derived(days.find((d) => d.day === day) ?? days[0])
   const latestReplan = $derived(store.replans.at(-1) ?? null)
-  const previousItinerary = $derived(
-    itinerary && store.versions.length > 1
-      ? (mockEngine.getItinerary(store.trip?.id ?? '', itinerary.version - 1) ?? null)
-      : null,
-  )
+  // The version before the current one, loaded from the API (or the demo engine).
+  const previousItinerary = $derived(store.previousItinerary)
   const canUndo = $derived(
     CHANGES_AVAILABLE && store.versions.indexOf(store.trip?.current_version ?? 0) > 0,
   )
@@ -52,7 +49,9 @@
   )
 
   const dates = $derived(
-    store.trip ? `${store.trip.start_date} – ${store.trip.end_date}` : '',
+    store.trip
+      ? `${formatTripDate(store.trip.start_date)} – ${formatTripDate(store.trip.end_date)}`
+      : '',
   )
 
   function handleSwap(activityId: string, backupId: string, _name: string) {
@@ -65,9 +64,10 @@
     itinerary.days = [...itinerary.days]
   }
 
-  function handleQuickChange(typed: Partial<ChangeEvent>) {
+  async function handleQuickChange(typed: Partial<ChangeEvent>) {
     adjustOpen = false
-    void store.submitTypedChange(typed)
+    await store.submitTypedChange(typed)
+    if (store.clarifyQuestion) adjustOpen = true // A5 needs one detail
   }
 </script>
 
@@ -144,7 +144,7 @@
             <ValidationSummary
               results={dayResults}
               maxTravelMin={store.requirements?.max_travel_min ?? 30}
-              onMixItUp={CHANGES_AVAILABLE ? () => store.simulate('diversity') : undefined}
+              onMixItUp={DEMO_MODE ? () => store.simulate('diversity') : undefined}
             />
             <ol class="activities">
               {#each activeDay.activities as activity, i (activity.id)}
@@ -199,12 +199,17 @@
 <AdjustTripDialog
   open={adjustOpen}
   busy={store.busy}
-  onsubmit={(text) => {
+  question={store.clarifyQuestion}
+  onsubmit={async (text) => {
     adjustOpen = false
-    void store.submitChange(text)
+    await store.submitChange(text)
+    if (store.clarifyQuestion) adjustOpen = true // A5 needs one detail
   }}
   onquick={handleQuickChange}
-  onclose={() => (adjustOpen = false)}
+  onclose={() => {
+    adjustOpen = false
+    store.clearQuestion()
+  }}
 />
 
 <style>

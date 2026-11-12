@@ -127,6 +127,22 @@ export function formatDate(iso: string, locale: Locale = activeLocale): string {
   return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(d)
 }
 
+/**
+ * A trip day ("2026-11-27") as a US date: "11/27/2026". Trips are in the USA, so the
+ * US format is used. Read as UTC so the day never shifts in the viewer's time zone.
+ */
+export function formatTripDate(day: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(day)
+  if (!match) return day
+  const d = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+  return new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(d)
+}
+
 export function formatDateRange(
   startIso: string,
   endIso: string,

@@ -19,6 +19,8 @@ def no_real_gemini_calls(request, monkeypatch):
     if request.module.__name__.rsplit(".", 1)[-1] not in LIVE_TEST_MODULES:
         monkeypatch.setattr(settings, "GOOGLE_API_KEY", "")
         monkeypatch.setattr(settings, "NVIDIA_API_KEY", "")
+        monkeypatch.setattr(settings, "GEOAPIFY_API_KEY", "")
+        monkeypatch.setattr(settings, "MAPBOX_SECRET_TOKEN", "")
     # Tests must not depend on anyone's personal .env choices.
     monkeypatch.setattr(settings, "LLM_PRIMARY", "gemini")
     monkeypatch.setattr(settings, "DEMO_MODE", True)

@@ -68,6 +68,11 @@ def check_budget(
         if passed:
             passed = False
             severity = "data-gap"
+            # Not "passed": with unknown prices we cannot say the plan fits the budget.
+            message = (
+                f"Budget not fully checked: {unknown_costs} activities have unknown costs. "
+                f"Known regular cost: ${regular_total}; splurges: ${splurge_total}."
+            )
 
     return ValidationResult(
         id="budget-check",

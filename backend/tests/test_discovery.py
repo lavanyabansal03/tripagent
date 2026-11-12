@@ -99,6 +99,7 @@ def test_unknown_interest_still_returns_some_places():
 
 
 def test_graph_find_step_uses_discovery():
-    places = _search_places({"interests": ["cafe", "nature"], "mode": "walking"})
+    trip = {"destination": "Seattle", "interests": ["cafe", "nature"], "mode": "walking"}
+    places = _search_places(trip)
     assert places and isinstance(places[0], dict)
     assert {"id", "name", "lat", "lng"} <= places[0].keys()

@@ -9,9 +9,11 @@
     onsubmit: (text: string) => void
     onquick: (typed: Partial<ChangeEvent>) => void
     onclose: () => void
+    /** A5's question when the last change was unclear (or a copy key). */
+    question?: string | null
   }
 
-  let { open, busy = false, onsubmit, onquick, onclose }: Props = $props()
+  let { open, busy = false, onsubmit, onquick, onclose, question = null }: Props = $props()
   let text = $state('')
 
   const quickActions = [
@@ -45,6 +47,12 @@
         </button>
       </header>
 
+      {#if question}
+        <p class="question" role="status">
+          {question.startsWith('adjust.') ? t(question) : t('adjust.question', { question })}
+        </p>
+      {/if}
+
       <textarea
         rows="3"
         bind:value={text}
@@ -77,6 +85,14 @@
 {/if}
 
 <style>
+  .question {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-warning-soft);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+  }
   .backdrop {
     position: fixed;
     inset: 0;

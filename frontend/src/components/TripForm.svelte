@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { t } from '../copy/i18n'
   import { DEMO_MODE, type TripFormInput } from '../api/client'
   import TellUsMoreField from './TellUsMoreField.svelte'
@@ -9,34 +10,38 @@
     busy?: boolean
     /** Overridable for tests; defaults to the build's demo/live mode. */
     demoMode?: boolean
+    /** The traveller's last answers, when they come back with "Edit trip details". */
+    initial?: TripFormInput | null
   }
 
-  let { onsubmit, busy = false, demoMode = DEMO_MODE }: Props = $props()
+  let { onsubmit, busy = false, demoMode = DEMO_MODE, initial = null }: Props = $props()
+  // Read once when the form opens; later changes to `initial` do not reset what is typed.
+  const first = untrack(() => initial)
 
   // Seattle is the tuned demo city; prefill dates so the demo is one click.
   const today = new Date()
   const start = new Date(today.getTime() + 7 * 86_400_000).toISOString().slice(0, 10)
   const end = new Date(today.getTime() + 9 * 86_400_000).toISOString().slice(0, 10)
 
-  let destination = $state('Seattle')
-  let startDate = $state(start)
-  let endDate = $state(end)
-  // A number box: Svelte gives a number when filled and null when empty.
-  let budget = $state<number | null>(500)
-  let budgetStrict = $state(true)
-  let mode = $state<TripFormInput['mode']>('transit')
-  let pace = $state<TripFormInput['pace']>('moderate')
-  let maxTravel = $state(30)
-  let freeText = $state('')
-  let touristLocal = $state(50)
+  let destination = $state(first?.destination ?? 'Seattle')
+  let startDate = $state(first?.start_date ?? start)
+  let endDate = $state(first?.end_date ?? end)
+  // A number input gives a number once the traveller types, and '' or null when emptied.
+  let budget = $state<string | number | null>(first ? first.budget : '500')
+  let budgetStrict = $state(first ? first.budget_strictness === 'strict' : true)
+  let mode = $state<TripFormInput['mode']>(first?.mode ?? 'transit')
+  let pace = $state<TripFormInput['pace']>(first?.pace ?? 'moderate')
+  let maxTravel = $state(first?.max_travel_min ?? 30)
+  let freeText = $state(first?.free_text ?? '')
+  let touristLocal = $state(first?.tourist_local_ratio ?? 50)
   let interestInput = $state('')
-  let interests = $state<string[]>(['coffee'])
-  let avoid = $state<string[]>([])
+  let interests = $state<string[]>(first ? [...first.interests] : ['coffee'])
+  let avoid = $state<string[]>(first ? [...first.avoid] : [])
   let avoidInput = $state('')
 
   // Which fields the traveller actually touched (F-01). Untouched defaults are
   // labelled "We assumed this" instead of "You chose this".
-  const touched = new Set<string>()
+  const touched = new Set<string>(first?.touched ?? [])
   function mark(field: string) {
     touched.add(field)
   }

@@ -73,6 +73,24 @@ trace_events = Table(
     Column("event", JSON, nullable=False),  # one ExecutionEvent
 )
 
+# Added for changes during a trip (L4). New tables are created on start; existing
+# tables are never altered, so this is safe on the live Neon database.
+replan_events = Table(
+    "replan_events",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("trip_id", String, nullable=False, index=True),
+    Column("position", Integer, nullable=False),  # order of the changes for this trip
+    Column("event", JSON, nullable=False),  # one ReplanEvent
+)
+
+trip_places = Table(
+    "trip_places",
+    metadata,
+    Column("trip_id", String, primary_key=True),
+    Column("places", JSON, nullable=False),  # places found when planning (repair candidates)
+)
+
 _engine: Engine | None = None
 LOCAL_DATABASE = "sqlite:///./tripagent.db"
 
@@ -196,9 +214,13 @@ def get_run(run_id: str) -> dict[str, Any] | None:
 
 
 def run_id_for_trip(trip_id: str) -> str | None:
-    """The trip's planning run, if it already has one."""
+    """The trip's planning run, if it already has one (change runs are left out)."""
     with engine().connect() as db:
-        return db.execute(select(runs.c.id).where(runs.c.trip_id == trip_id).limit(1)).scalar()
+        rows = db.execute(select(runs.c.id, runs.c.run).where(runs.c.trip_id == trip_id)).all()
+    for run_id, run in rows:
+        if (run or {}).get("phase") != "adapt":
+            return run_id
+    return None
 
 
 # --- trace events ------------------------------------------------------------
@@ -224,3 +246,59 @@ def get_trace(trip_id: str) -> list[dict[str, Any]]:
     )
     with engine().connect() as db:
         return list(db.execute(query).scalars())
+
+
+def append_trace(trip_id: str, run_id: str, events: list[dict[str, Any]]) -> None:
+    """Add trace events (a change run) without touching earlier runs' events."""
+    if not events:
+        return
+    with engine().begin() as db:
+        db.execute(
+            insert(trace_events),
+            [{"trip_id": trip_id, "run_id": run_id, "event": event} for event in events],
+        )
+
+
+# --- changes during the trip (L4) ---------------------------------------------
+
+
+def save_replan(event: dict[str, Any]) -> None:
+    """Store one ReplanEvent; it is shown in the trip's change history."""
+    with engine().begin() as db:
+        count = db.execute(
+            select(replan_events.c.id).where(replan_events.c.trip_id == event["trip_id"])
+        ).all()
+        db.execute(
+            insert(replan_events).values(
+                id=event["id"], trip_id=event["trip_id"], position=len(count), event=event
+            )
+        )
+
+
+def list_replans(trip_id: str) -> list[dict[str, Any]]:
+    """All changes of a trip, oldest first."""
+    query = (
+        select(replan_events.c.event)
+        .where(replan_events.c.trip_id == trip_id)
+        .order_by(replan_events.c.position)
+    )
+    with engine().connect() as db:
+        return list(db.execute(query).scalars())
+
+
+def save_places(trip_id: str, places: list[dict[str, Any]]) -> None:
+    """Keep the places found when planning, so repairs have candidates later."""
+    with engine().begin() as db:
+        changed = db.execute(
+            update(trip_places).where(trip_places.c.trip_id == trip_id).values(places=places)
+        )
+        if changed.rowcount == 0:
+            db.execute(insert(trip_places).values(trip_id=trip_id, places=places))
+
+
+def get_places(trip_id: str) -> list[dict[str, Any]]:
+    with engine().connect() as db:
+        places = db.execute(
+            select(trip_places.c.places).where(trip_places.c.trip_id == trip_id)
+        ).scalar()
+    return places or []

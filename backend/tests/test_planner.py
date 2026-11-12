@@ -84,6 +84,48 @@ def test_places_are_clustered_by_geographic_area():
     assert max(second_day_lats) - min(second_day_lats) < 0.01
 
 
+def many_places(count):
+    # Close together, so every stop can fit in the 09:00-20:00 day.
+    return [
+        make_place(f"p{i}", f"Place {i}", 47.60 + i * 0.001, -122.33, experience=kind)
+        for i, kind in zip(range(count), ["nature", "culture", "food"] * count, strict=False)
+    ]
+
+
+def test_pace_decides_how_many_stops_a_day_gets():
+    # Before, every day had at most 3 stops whatever the pace (seen live: days ending at 2 PM).
+    trip = make_trip(end_date="2026-11-10")  # two days
+    counts = {}
+    for pace in ("relaxed", "moderate", "packed"):
+        itinerary, _ = plan_and_validate({**trip, "pace": pace}, many_places(20))
+        counts[pace] = [len(day["activities"]) for day in itinerary["days"]]
+
+    assert counts == {"relaxed": [3, 3], "moderate": [4, 4], "packed": [5, 5]}  # incl. lunch
+
+
+def test_stops_that_do_not_fit_the_day_do_not_fail_the_trip():
+    # Seen live: a packed San Antonio trip ended INFEASIBLE because 6 places were far apart.
+    far_apart = [
+        make_place(f"p{i}", f"Place {i}", 47.60 + i * 0.05, -122.33, experience=kind)
+        for i, kind in zip(range(6), ["nature", "culture", "food"] * 2, strict=True)
+    ]
+    trip = make_trip(pace="packed", daily_end="13:00")
+
+    itinerary, checks, _, terminal, _ = build_plan_with_repairs(trip, far_apart)
+
+    assert terminal == "PASS"
+    assert 0 < len(itinerary["days"][0]["activities"]) < 6
+    left_out = next(c for c in checks if c["rule"] == "daily_schedule")
+    assert left_out["severity"] == "soft"
+    assert left_out["message"].startswith("Not enough time in the day for: ")
+
+
+def test_unknown_pace_uses_moderate():
+    itinerary, _ = plan_and_validate(make_trip(pace=None), many_places(10))
+
+    assert len(itinerary["days"][0]["activities"]) == 4
+
+
 def test_plan_repair_swaps_closed_place_for_available_candidate():
     closed_monday = [{"day": "sunday", "open": "12:00", "close": "13:00"}]
     places = [

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from app.agents.meals import is_meal_spot
 from app.agents.repair import hard_failures, repair_itinerary, violation_score
-from app.config import MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS
+from app.config import MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS, STOPS_PER_DAY
 from app.models.validation_result import ValidationResult
 from app.tools.base import LatLng, Mode
 from app.tools.mock_places import distance_km, rough_minutes
@@ -19,8 +19,7 @@ from app.validation.overlap import check_overlap
 from app.validation.travel_time import check_travel_time
 from app.validation.variety import check_variety
 
-# Stops per day for each pace, counting the lunch stop.
-STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 5}
+# Stops per day for each pace (counting the lunch stop): STOPS_PER_DAY in config.py.
 # Lunch goes after the first two stops of the day (about midday with a 9:00 start).
 LUNCH_SLOT = 2
 # A lunch spot should be open from at least 12:00 until 14:30 that day.
@@ -49,6 +48,16 @@ _DESTINATION_TIMEZONES = {
 }
 
 
+def _trip_timezone(trip: dict[str, Any]) -> ZoneInfo:
+    """The time zone found when the city was looked up, else the built-in list."""
+    try:
+        if trip.get("timezone"):
+            return ZoneInfo(trip["timezone"])
+    except (ValueError, KeyError):
+        pass
+    return _destination_timezone(str(trip.get("destination", "")))
+
+
 def _destination_timezone(destination: str) -> ZoneInfo:
     normalized = destination.strip().lower()
     timezone_name = next(
@@ -68,8 +77,8 @@ def _duration(place: dict[str, Any]) -> int:
 
 
 def _stops_per_day(trip: dict[str, Any]) -> int:
-    """How many stops fit in a day for the traveller's pace (3 when no pace is given)."""
-    return STOPS_PER_DAY.get(str(trip.get("pace", "")), 3)
+    """How many stops fit in a day for the traveller's pace (moderate when not given)."""
+    return STOPS_PER_DAY.get(str(trip.get("pace", "")), STOPS_PER_DAY["moderate"])
 
 
 def _clock(value: Any) -> time:
@@ -313,7 +322,46 @@ def check_itinerary(
                 activity_ids=[],
             )
         )
+    validation.extend(_change_checks(trip, activities, trip_id=trip_id, version=version))
     return validation
+
+
+def _change_checks(
+    trip: dict[str, Any], activities: list[dict[str, Any]], *, trip_id: str, version: int
+) -> list[ValidationResult]:
+    """Checks that only fail after a change during the trip (L4); added only when failing.
+
+    - day_end: an activity now ends after the day's end (for example after "I'm late").
+    - closure: an activity's place was reported closed today.
+    """
+    daily_end = _as_time(trip.get("daily_end", "20:00"), time(20, 0))
+    late = [
+        a["id"]
+        for a in activities
+        if datetime.fromisoformat(a["end"]).time().replace(tzinfo=None) > daily_end
+        or datetime.fromisoformat(a["end"]).date() > datetime.fromisoformat(a["start"]).date()
+    ]
+    closed = [a["id"] for a in activities if a.get("unavailable")]
+    results = []
+    if late:
+        results.append(
+            ValidationResult(
+                id="day-end-check", trip_id=trip_id, version=version, rule="day_end",
+                passed=False, severity="hard",
+                message=f"{len(late)} activities now end after {daily_end:%H:%M}.",
+                activity_ids=late,
+            )
+        )
+    if closed:
+        results.append(
+            ValidationResult(
+                id="closure-check", trip_id=trip_id, version=version, rule="closure",
+                passed=False, severity="hard",
+                message=f"{len(closed)} activities are at places reported closed today.",
+                activity_ids=closed,
+            )
+        )
+    return results
 
 
 def plan_and_validate(
@@ -344,7 +392,7 @@ def plan_and_validate(
     day_count = (end_date - start_date).days + 1
     daily_start = _as_time(trip.get("daily_start", "09:00"), time(9, 0))
     daily_end = _as_time(trip.get("daily_end", "20:00"), time(20, 0))
-    destination_timezone = _destination_timezone(str(trip.get("destination", "")))
+    destination_timezone = _trip_timezone(trip)
     mode: Mode = trip.get("mode", "walking")
     dates = [start_date + timedelta(days=i) for i in range(day_count)]
     buckets = _schedule_days(places, day_count, repair_iteration, _stops_per_day(trip), dates)
@@ -420,9 +468,11 @@ def plan_and_validate(
                 version=version,
                 rule="daily_schedule",
                 passed=False,
-                severity="hard",
+                # A place that does not fit before the day ends is simply not used; the
+                # plan itself is fine. It was "hard" and failed whole trips at a packed pace.
+                severity="soft",
                 message=(
-                    "Daily time limits prevented scheduling: "
+                    "Not enough time in the day for: "
                     + ", ".join(unscheduled_places)
                     + "."
                 ),
@@ -493,11 +543,42 @@ def build_plan_with_repairs(
     score stops improving twice in a row.
     """
     itinerary, first_checks = plan_and_validate(trip, places, version=version)
-    choose = _limited(choose, MAX_REPAIR_LLM_CALLS)
     if add_backups is not None:
         add_backups(itinerary, None)  # every activity
-    checks = first_checks
     itinerary["repairs"] = []
+    return (
+        itinerary,
+        *repair_until_valid(
+            trip, itinerary, places, version=version, choose=choose,
+            add_backups=add_backups, first_checks=first_checks,
+        ),
+    )
+
+
+def repair_until_valid(
+    trip: dict[str, Any],
+    itinerary: dict[str, Any],
+    places: list[dict[str, Any]],
+    *,
+    version: int,
+    choose: Callable[..., Any] | None = None,
+    add_backups: Callable[[dict[str, Any], set[str] | None], int] | None = None,
+    first_checks: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], int, str, str | None]:
+    """The L3 repair loop on an itinerary that already exists (new plan or a change).
+
+    Patches only broken activities, at most MAX_REPAIR_ITERATIONS times, and stops early
+    when a try changes nothing or the violation score stops improving twice.
+    Returns (checks, iterations, terminal, explanation); terminal is PASS or INFEASIBLE.
+    """
+    if first_checks is None:
+        results = check_itinerary(
+            trip, itinerary["days"], trip_id=itinerary["trip_id"], version=version
+        )
+        first_checks = [r.model_dump() for r in results]
+    choose = _limited(choose, MAX_REPAIR_LLM_CALLS)
+    checks = first_checks
+    itinerary.setdefault("repairs", [])
     best_score = violation_score(checks)
     stalls = 0
     iterations = 0
@@ -535,9 +616,9 @@ def build_plan_with_repairs(
     itinerary["score"] = 1.0 if all(c["passed"] for c in checks) else 0.5
     _attach_day_warnings(itinerary, checks)
     if not hard_failures(checks):
-        return itinerary, checks, iterations, "PASS", None
+        return checks, iterations, "PASS", None
     explanation = (
         f"Plan remains infeasible after {iterations} repair attempt(s): "
         + " ".join(c["message"] for c in hard_failures(checks))
     )
-    return itinerary, checks, iterations, "INFEASIBLE", explanation
+    return checks, iterations, "INFEASIBLE", explanation

@@ -39,6 +39,39 @@ def _words(text: str) -> list[str]:
     return [w[:-1] if len(w) > 3 and w.endswith("s") else w for w in cleaned.split()]
 
 
+def name_match(asked: str, found: str) -> int:
+    """How well a map name fits the name asked for: 0 no, 1 weak, 2 good, 3 exact.
+
+    Whole words only ("The Met" is not "Metropolitan Opera House"); "Joe's" = "Joes".
+      3  the same name                       "The Alamo"   / "Alamo"
+      2  the map's name is the shorter one   "Katz's Delicatessen" / "Katz's"
+      1  the map's name adds words           "The Alamo"   / "Alamo Gift Shop"
+    """
+
+    def words(text: str) -> str:
+        text = text.replace("'", "").replace("’", "")  # "Joe's" -> "Joes"
+        return " ".join(w for w in _words(text) if w != "the")
+
+    a, b = words(asked), words(found)
+    if not a or not b:
+        return 0
+    if a == b:
+        return 3
+    if f" {b} " in f" {a} ":
+        return 2
+    return 1 if f" {a} " in f" {b} " else 0
+
+
+# A weak match (the map's name adds words) is often a different place: "The Alamo Gift
+# Shop", "Museum of Modern Art (MoMA) films". Seen live, so only good matches count.
+GOOD_NAME_MATCH = 2
+
+
+def same_name(asked: str, found: str) -> bool:
+    """Is `found` (a map name) the place that was asked for? See name_match."""
+    return name_match(asked, found) >= GOOD_NAME_MATCH
+
+
 def _query_terms(query: str) -> list[set[str]]:
     """Split what the user typed into terms. A place matches a term if it has any word in it.
 
@@ -100,3 +133,11 @@ class MockPlaceSearch:
             found.sort(key=lambda pair: pair[0])  # nearest first
         # Hand back copies so callers cannot accidentally change our stored data.
         return [place.model_copy(deep=True) for _, place in found[:limit]]
+
+    def find_by_name(self, name: str, near: LatLng, area: str = "") -> Place | None:
+        """The seed place that best fits the name ("Space Needle"), or None. Same rule as live."""
+        scored = [(name_match(name, place.name), place) for place in self._places]
+        best_score, best = max(scored, key=lambda pair: pair[0], default=(0, None))
+        if best is None or best_score < GOOD_NAME_MATCH:
+            return None
+        return best.model_copy(deep=True)

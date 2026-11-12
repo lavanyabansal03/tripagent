@@ -52,6 +52,7 @@
   },
   "understood": {
     "sectionTitle": "Here's what we understood",
+    "editTrip": "Edit trip details",
     "fromText": "From your note",
     "fromForm": "You chose this",
     "assumed": "We assumed this. Tap to change.",
@@ -143,6 +144,8 @@
     "hardBadge": "Problem",
     "unknownBadge": "Unknown data",
     "backupsHeader": "Backups (same vibe)",
+    "backupMatch": "{n}% match",
+    "useBackup": "Use this instead",
     "backupsCount": "{count, plural, one {1 backup} other {# backups}}",
     "noBackups": "No backup found nearby yet. We'll search again if this falls through.",
     "lockTooltip": "Keep this activity no matter what changes.",
@@ -173,6 +176,7 @@
     "quickCoffeeOnTheWay": "Coffee on the way",
     "cta": "Adjust my trip",
     "working": "Adjusting only what's affected…",
+    "question": "We need one detail: {question}",
     "cancel": "Cancel",
     "needsClarification": "We didn't catch what changed. Try something like \"I'm 1 hour late\" or \"skip museums\"."
   },

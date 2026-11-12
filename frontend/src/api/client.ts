@@ -22,12 +22,11 @@ import * as mock from './mock/engine'
 export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false'
 
 /**
- * Changing a plan (Adjust trip, Swap to a backup, Undo, Mix it up) needs the
- * L4 endpoints: /changes, /activities/{id}/swap, /versions/{v}/restore and
- * /simulate. The backend does not have them yet, so these actions only work on
- * the demo engine. Set this to true once those endpoints exist.
+ * Changing a plan (Adjust trip, Swap to a backup, Undo) works in both modes: the
+ * backend has the L4 endpoints /changes, /activities/{id}/swap,
+ * /versions/{v}/restore and /simulate (A5 Change Interpreter + A7 Explainer).
  */
-export const CHANGES_AVAILABLE = DEMO_MODE
+export const CHANGES_AVAILABLE = true
 
 /**
  * API origin. In development the Vite proxy forwards `/api` to the backend, so
@@ -124,7 +123,8 @@ export const api = {
 
   submitChange(
     tripId: string,
-    input: { text?: string; typed?: Partial<ChangeEvent> },
+    // `day`: the day open on screen ("I'm late" moves that day's stops).
+    input: { text?: string; typed?: Partial<ChangeEvent>; day?: number },
   ): Promise<{ run_id: string; change: ChangeEvent }> {
     if (DEMO_MODE) return Promise.resolve(mock.submitChange(tripId, input))
     return request<{ run_id: string; change: ChangeEvent }>(`/trips/${tripId}/changes`, {

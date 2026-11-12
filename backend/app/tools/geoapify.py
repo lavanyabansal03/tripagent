@@ -13,12 +13,16 @@ from typing import Any
 import httpx
 
 from app.tools.base import LatLng, Mode
-from app.tools.mock_places import SPEED_KMH, _words
+from app.tools.mock_places import GOOD_NAME_MATCH, SPEED_KMH, _words, name_match, same_name
 from app.tools.osm_hours import parse_osm_hours
 from app.tools.place import Place
 
 PLACES_URL = "https://api.geoapify.com/v2/places"
+GEOCODE_URL = "https://api.geoapify.com/v1/geocode/search"
+DETAILS_URL = "https://api.geoapify.com/v2/place-details"
 TIMEOUT_S = 10
+# How far from the city centre a place looked up by name may be ("Statue of Liberty").
+NAME_SEARCH_RADIUS_M = 25000
 # Our demo city. Used when the caller does not say where to search.
 SEATTLE_CENTER = LatLng(lat=47.6062, lng=-122.3321)
 DEFAULT_RADIUS_M = 5000
@@ -212,3 +216,47 @@ class GeoapifyPlaceSearch:
                 continue  # whole words only, like the mock search
             places.append(place)
         return places[:limit]
+
+    def find_by_name(self, name: str, near: LatLng, area: str = "") -> Place | None:
+        """One named place near the city ("Joe's Pizza", "Times Square"), or None.
+
+        Two calls: geocoding finds the place by its name, then Place Details gives its
+        categories and opening hours. A different place, or one too far away, is None.
+        """
+        params = {
+            "text": f"{name}, {area}" if area else name,
+            "filter": f"circle:{near.lng},{near.lat},{NAME_SEARCH_RADIUS_M}",
+            "bias": f"proximity:{near.lng},{near.lat}",
+            "limit": 5,
+            "format": "json",
+            "apiKey": self._api_key,
+        }
+        # Only real places to visit (not a street or a whole area) with a good name match;
+        # "The Alamo Gift Shop" is not "The Alamo". Ties keep the map's order.
+        candidates = [
+            (name_match(name, str(result.get("name") or "")), index, result)
+            for index, result in enumerate(self._get(GEOCODE_URL, params).get("results") or [])
+            if result.get("result_type") == "amenity" and result.get("place_id")
+        ]
+        candidates = [c for c in candidates if c[0] >= GOOD_NAME_MATCH]
+        if not candidates:
+            return None
+        best = max(candidates, key=lambda c: (c[0], -c[1]))[2]
+        details = self._get(DETAILS_URL, {"id": best["place_id"], "apiKey": self._api_key})
+        features = details.get("features") or []
+        place = _to_place(features[0], datetime.now(UTC).isoformat()) if features else None
+        if place is None or not same_name(name, place.name):
+            return None
+        return place
+
+    def _get(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
+        # Same rule as search_places: never let the URL (with our key) into an error message.
+        try:
+            response = self._client.get(url, params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            status = error.response.status_code
+            raise PlaceSearchError(f"Geoapify answered with HTTP {status}") from None
+        except httpx.HTTPError as error:
+            raise PlaceSearchError(f"Geoapify request failed ({type(error).__name__})") from None
+        return response.json()

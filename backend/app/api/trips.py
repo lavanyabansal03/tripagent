@@ -12,6 +12,8 @@ from app import storage
 from app.agents.preferences import Preferences
 from app.agents.preferences_reader import read_preferences
 from app.graph.trip_planner import build_trip_graph
+from app.tools.geocode import locate_city
+from app.tools.parallel import run_all
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 runs_router = APIRouter(prefix="/runs", tags=["runs"])
@@ -161,6 +163,9 @@ class RunStatus(BaseModel):
     terminal: Literal["PASS", "INFEASIBLE", "NEEDS_USER", "ERROR"] | None
     message: str | None = None
     started_at: str
+    # When a plan could not be made: what blocked it, in the shape the website's
+    # "couldn't plan" notice reads (InfeasibleReport).
+    infeasible: dict[str, Any] | None = None
 
 
 # Trips, versions, runs and traces are saved in the database (app/storage.py, ADR-005).
@@ -263,7 +268,13 @@ def create_trip(request: TripRequest) -> CreateTripResponse:
     end_date = request.end_date or ""
     now = datetime.now(UTC).isoformat()
 
-    note = _read_note(request.free_text)
+    # Read the note (LLM) and look the city up (Geoapify) at the same time. The city
+    # lookup is cached, so "Build my plan" later does not wait for it again.
+    note, _ = run_all(
+        [lambda: _read_note(request.free_text), lambda: locate_city(request.destination)]
+    )
+    if not isinstance(note, Preferences):
+        note = Preferences()
     interests = _merge_items(request.interests, note.interests)
     avoid = _merge_items(request.avoid, note.avoid)
 
@@ -375,6 +386,22 @@ def answer_questions(trip_id: str, request: AnswersRequest) -> TripRequirements:
     return requirements
 
 
+def _infeasible_report(result: dict[str, Any], run_status: str) -> dict[str, Any] | None:
+    """Why no usable plan was made, for the website; None when the plan is fine."""
+    if run_status == "done":
+        return None
+    hard = [
+        check["rule"]
+        for check in result.get("validation", [])
+        if not check.get("passed") and check.get("severity") == "hard"
+    ]
+    return {
+        "blocking_rule": hard[0] if hard else "error",
+        "explanation": result.get("explanation") or "We couldn't finish planning.",
+        "suggestions": [],
+    }
+
+
 @router.post("/{trip_id}/plan", response_model=PlanResponse)
 def plan_trip(trip_id: str) -> PlanResponse:
     record = _load(trip_id)
@@ -421,10 +448,13 @@ def plan_trip(trip_id: str) -> PlanResponse:
         terminal=result.get("terminal") or ("PASS" if succeeded else "ERROR"),
         message=result.get("explanation") or None,
         started_at=started_at,
+        infeasible=_infeasible_report(result, run_status),
     )
     if succeeded:
         itinerary = result.get("itinerary", {})
         storage.save_itinerary(trip_id, itinerary)
+        # Candidates for repairs during the trip (changes, L4).
+        storage.save_places(trip_id, result.get("places", []))
         trip = trip.model_copy(
             update={
                 "status": "infeasible" if run_status == "infeasible" else "planned",
@@ -452,7 +482,10 @@ def get_trip_requirements(trip_id: str) -> TripRequirements:
 
 @router.get("/{trip_id}/itinerary")
 def get_itinerary(trip_id: str, version: int | None = None) -> dict[str, Any] | None:
-    _load(trip_id)
+    trip = Trip.model_validate(_load(trip_id)["trip"])
+    # Without a version: the CURRENT one (after Undo it is not the newest).
+    if version is None and trip.current_version:
+        version = trip.current_version
     return storage.get_itinerary(trip_id, version)
 
 
@@ -471,7 +504,7 @@ def get_versions(trip_id: str) -> list[int]:
 @router.get("/{trip_id}/replans", response_model=list[dict[str, Any]])
 def get_replans(trip_id: str) -> list[dict[str, Any]]:
     _get_trip(trip_id)
-    return []
+    return storage.list_replans(trip_id)  # changes during the trip, oldest first
 
 
 @runs_router.get("/{run_id}", response_model=RunStatus)
