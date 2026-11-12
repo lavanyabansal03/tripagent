@@ -59,8 +59,8 @@ def test_llm_closure_must_name_a_real_stop(monkeypatch):
 
     result = run("the museum is closed today")
 
-    # The LLM's id is invalid, so the word rules find the one museum instead.
-    assert (result.status, result.type, result.source) == ("ok", "closure", "rules")
+    # The LLM's id is invalid; the words name the one museum, so code uses that id.
+    assert (result.status, result.type, result.source) == ("ok", "closure", "llm")
     assert result.payload["activity_id"] == "a2"
 
 
@@ -179,3 +179,17 @@ def test_adding_stops_on_the_way_is_not_supported_yet():
 
 def test_late_uses_the_day_on_screen():
     assert run("90 minutes late", day=2).payload["day"] == 2
+
+
+def test_named_stop_beats_a_wrong_llm_pick(monkeypatch):
+    # Seen live: "Starbucks is closed" and the LLM returned Monorail Espresso's id.
+    itinerary = {"days": [{"day": 1, "activities": [
+        activity("s", "Starbucks", "cafe", "10:00"),
+        activity("m", "Monorail Espresso", "cafe", "12:00"),
+    ]}]}
+    fake_llm(monkeypatch, ChangeShape(type="closure", activity_id="m"))
+
+    result = interpret(text="Starbucks is closed today", typed=None, itinerary=itinerary,
+                       requirements=REQS, day=1)
+
+    assert result.status == "ok" and result.payload["activity_id"] == "s"

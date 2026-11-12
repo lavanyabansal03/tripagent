@@ -17,8 +17,6 @@ from pydantic import BaseModel, Field
 from app.agents.llm import ask_json
 from app.config import MAX_REASON_CHARS
 
-MAX_TRIGGER_CHARS = 120
-
 
 class Reason(BaseModel):
     activity_id: str
@@ -87,8 +85,9 @@ Changes:
 {lines}
 
 For each id above write one short sentence (under 25 words) that tells the traveller
-what changed and why. Use ONLY the facts above: no new places, prices, hours or
-opinions. "trigger" repeats what happened in a few words."""
+what changed and the planner's reason. Use ONLY the facts above. Do not describe the
+places (no location, food, quality, prices, hours or opinions). "trigger" repeats
+what happened in a few words."""
 
 
 def explain(
@@ -125,7 +124,7 @@ def explain(
             continue  # names a place that is not part of this change
         reasons[item.activity_id] = text[:MAX_REASON_CHARS]
         used_llm = True
-    llm_trigger = " ".join(answer.trigger.split())
-    if llm_trigger and len(llm_trigger) <= MAX_TRIGGER_CHARS:
-        trigger_text = llm_trigger
+    # The trigger stays the one code built from the checked change (A5): it is
+    # grammatical after "Because ..." and grounded; A7 writes only the reasons.
     return trigger_text, reasons, "llm" if used_llm else "rules"
+

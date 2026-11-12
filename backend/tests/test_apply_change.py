@@ -93,3 +93,17 @@ def test_swap_uses_a_stored_backup():
 def test_invalid_changes_are_refused(change, payload):
     with pytest.raises(ChangeError):
         apply_change(change, payload, REQS, plan())
+
+
+def test_swap_between_two_branches_of_one_chain_is_told_apart():
+    itinerary = plan()
+    target = itinerary["days"][0]["activities"][2]
+    target["place"]["name"] = "Starbucks"
+    target["backups"] = [{"place_id": "b2", "place": {
+        "id": "b2", "name": "Starbucks", "address": "1st & Pike",
+    }}]
+
+    _, after, _ = apply_change("swap", {"activity_id": "c", "backup_id": "b2"}, REQS, itinerary)
+
+    reason = after["days"][0]["activities"][2]["reason"]
+    assert reason == "You picked a different Starbucks (1st & Pike)."

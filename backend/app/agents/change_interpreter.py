@@ -75,14 +75,14 @@ def validate(
     if shape.type == "time":
         if shape.minutes is None or not 1 <= shape.minutes <= MAX_DELAY_MINUTES:
             return _ask("How many minutes late are you?", "time", source)
-        trigger = shape.trigger or f"you're running {shape.minutes} minutes late"
+        trigger = f"you're running {shape.minutes} minutes late"
         return Interpretation(
             "ok", "time", {"minutes": shape.minutes, "day": day}, trigger, source=source
         )
     if shape.type == "budget":
         if shape.budget is None or shape.budget < 0:
             return _ask("What is your new budget?", "budget", source)
-        trigger = shape.trigger or f"your budget is now ${shape.budget:g}"
+        trigger = f"your budget is now ${shape.budget:g}"
         return Interpretation("ok", "budget", {"budget": shape.budget}, trigger, source=source)
     if shape.type == "closure":
         match = next((a for a in stops if a.get("id") == shape.activity_id), None)
@@ -93,20 +93,20 @@ def validate(
             return _ask(f"{name} is locked or done. Unlock it first if you want it changed.",
                         "closure", source)
         name = match["place"].get("name")
-        trigger = shape.trigger or f"{name} is closed today"
+        trigger = f"{name} is closed today"
         payload = {"activity_id": match["id"], "day": day}
         return Interpretation("ok", "closure", payload, trigger, source=source)
     if shape.type == "transport":
         if shape.mode not in MODES:
             return _ask("How will you get around: walking, transit, driving or cycling?",
                         "transport", source)
-        trigger = shape.trigger or f"you switched to {shape.mode}"
+        trigger = f"you switched to {shape.mode}"
         return Interpretation("ok", "transport", {"mode": shape.mode}, trigger, source=source)
     if shape.type == "preference":
         avoid = [a.strip().lower() for a in shape.avoid if a and a.strip()]
         if not avoid:
             return _ask("What would you like to skip?", "preference", source)
-        trigger = shape.trigger or f"you want to skip {', '.join(avoid)}"
+        trigger = f"you want to skip {', '.join(avoid)}"
         return Interpretation("ok", "preference", {"avoid": avoid}, trigger, source=source)
     return _ask(shape.question or GENERIC_QUESTION, "unknown", source)
 
@@ -250,6 +250,12 @@ def interpret(
         return _ask(NOT_SUPPORTED_ADD, "preference")
 
     shape = ask_json(build_prompt(text, itinerary, requirements, day), ChangeShape)
+    if shape is not None and shape.type == "closure":
+        # The LLM proposes, code decides: if the words name exactly one stop, use it
+        # (the LLM once picked "Monorail Espresso" for "Starbucks is closed").
+        named = _find_stop(text.lower(), day_activities(itinerary, day))
+        if named is not None:
+            shape = shape.model_copy(update={"activity_id": named})
     if shape is not None:
         result = validate(shape, itinerary, day, source="llm")
         if result.status == "ok":

@@ -81,7 +81,7 @@ def apply_change(
             "est_cost": place.get("est_cost_low"),
             "cost_basis": place.get("cost_basis", "unknown"),
             "change_type": "replaced",
-            "reason": f"You picked {place.get('name')} instead of {old_name}.",
+            "reason": _swap_reason(place, old_name),
             "backups": [],
         })
         activity.pop("unavailable", None)
@@ -105,3 +105,12 @@ def _find(itinerary: dict[str, Any], activity_id: str) -> dict[str, Any]:
             if activity.get("id") == activity_id:
                 return activity
     raise ChangeError("Unknown activity.")
+
+
+def _swap_reason(place: dict[str, Any], old_name: str | None) -> str:
+    """'You picked X instead of Y.' Two branches of one chain get told apart by address."""
+    name = place.get("name")
+    if name and name == old_name:
+        where = place.get("address")
+        return f"You picked a different {name}" + (f" ({where})." if where else ".")
+    return f"You picked {name} instead of {old_name}."

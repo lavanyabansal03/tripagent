@@ -68,7 +68,7 @@ def test_llm_sentences_are_used_and_only_for_changed_activities(monkeypatch):
     trigger, reasons, by = explain("a place closed", DIFF, BEFORE, AFTER, REPAIRS)
 
     assert by == "llm"
-    assert trigger == "the museum closed"
+    assert trigger == "a place closed"  # code's trigger, not the LLM's
     assert reasons["a"].startswith("Frye Art Museum is closed")
     assert reasons["b"] == "You're running 90 minutes late."  # filled from code
     assert "k" not in reasons and "zzz" not in reasons
@@ -103,3 +103,20 @@ def test_no_changes_means_no_llm_call(monkeypatch):
     empty = {"changed": [], "moved": [], "removed": [], "added": [], "preserved": ["k"]}
 
     assert explain("budget changed", empty, BEFORE, BEFORE, []) == ("budget changed", {}, "rules")
+
+
+
+def test_trigger_is_always_the_one_code_built(monkeypatch):
+    fake_llm(monkeypatch, ExplanationShape(trigger="Running late.", reasons=[]))
+
+    trigger, _, _ = explain("you're running 90 minutes late", DIFF, BEFORE, AFTER, REPAIRS)
+
+    assert trigger == "you're running 90 minutes late"
+
+
+def test_prompt_forbids_describing_places(monkeypatch):
+    prompts = fake_llm(monkeypatch, ExplanationShape(trigger="x", reasons=[]))
+
+    explain("late", DIFF, BEFORE, AFTER, REPAIRS)
+
+    assert "Do not describe the" in prompts[0] and "places" in prompts[0]
