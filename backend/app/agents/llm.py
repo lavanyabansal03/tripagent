@@ -13,7 +13,7 @@ import logging
 import time
 from collections.abc import Callable
 from functools import partial
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from google import genai
 from google.genai import errors, types
@@ -65,10 +65,27 @@ def ask_gemini(prompt: str, shape: type[Shape]) -> Shape | None:
     return shape.model_validate_json(response.text)
 
 
+def without_nulls(value: Any) -> Any:
+    """Drop null values, at any depth, from an LLM's JSON answer.
+
+    Seen live: NVIDIA answers "avoid": null or "short_name": null for "nothing here".
+    A null means "not stated", which is each field's default (an empty list, "" or
+    None). Without this, one null failed the whole answer and the agent fell back to
+    Gemini or plain rules. A required field that is null is still missing, so the
+    answer is still rejected (the LLM proposes; code decides).
+    """
+    if isinstance(value, dict):
+        return {key: without_nulls(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [without_nulls(item) for item in value if item is not None]
+    return value
+
+
 def ask_nvidia(prompt: str, shape: type[Shape]) -> Shape | None:
     if not settings.NVIDIA_API_KEY:
         return None
-    return shape.model_validate(ask_nvidia_for_json(prompt, shape.model_json_schema()))
+    answer = ask_nvidia_for_json(prompt, shape.model_json_schema())
+    return shape.model_validate(without_nulls(answer))
 
 
 PROVIDERS: dict[str, Callable[[str, type[BaseModel]], BaseModel | None]] = {
