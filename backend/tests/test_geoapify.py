@@ -107,3 +107,13 @@ def test_get_place_search_picks_geoapify_only_in_live_mode(monkeypatch):
     assert isinstance(get_place_search(), GeoapifyPlaceSearch)
     monkeypatch.setattr(settings, "GEOAPIFY_API_KEY", "")
     assert isinstance(get_place_search(), MockPlaceSearch)  # no key: still works
+
+
+def test_diet_words_become_a_geoapify_filter():
+    seen: list[httpx.Request] = []
+    search = GeoapifyPlaceSearch("k", client=fake_client(seen=seen))
+    search.search_places("vegetarian restaurant", categories=["restaurant"])
+    params = seen[0].url.params
+    assert params["categories"] == "catering.restaurant"
+    assert params["conditions"] == "vegetarian"
+    assert params["limit"] == "20"  # "vegetarian" is a filter, not a name to look for

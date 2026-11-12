@@ -42,6 +42,38 @@ def test_walking_uses_mapbox(monkeypatch):
     assert "/mapbox/walking/-122.3425,47.6097;-122.3493,47.6205" in seen[0].url.path
 
 
+def test_mapbox_street_path_and_distance(monkeypatch):
+    monkeypatch.setattr(settings, "MAPBOX_SECRET_TOKEN", "test-token")
+    seen: list[httpx.Request] = []
+    body = {
+        "routes": [
+            {
+                "duration": 600,
+                "distance": 1250,
+                # Mapbox lists points as [lng, lat].
+                "geometry": {
+                    "coordinates": [[-122.3425, 47.6097], [-122.345, 47.615], [-122.3493, 47.6205]]
+                },
+            }
+        ]
+    }
+    result = travel_minutes(
+        PIKE_PLACE, SPACE_NEEDLE, "walking", live=True, client=fake_client(body=body, seen=seen)
+    )
+    assert result.minutes == 10.0
+    assert result.distance_km == 1.25
+    middle = result.geometry[1]
+    assert (middle.lat, middle.lng) == (47.615, -122.345)  # swapped back to lat, lng
+    assert seen[0].url.params["geometries"] == "geojson"
+
+
+def test_estimate_has_a_distance_but_no_path(monkeypatch):
+    monkeypatch.setattr(settings, "DEMO_MODE", True)
+    result = travel_minutes(PIKE_PLACE, SPACE_NEEDLE, "walking")
+    assert 1.2 < result.distance_km < 1.5
+    assert result.geometry is None
+
+
 def test_transit_uses_transitous_and_takes_the_fastest():
     seen: list[httpx.Request] = []
     client = fake_client(body=TRANSIT, seen=seen)

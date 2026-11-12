@@ -17,6 +17,14 @@
 
   /** Map validator rule codes to the UX copy guide's user-facing sentences. */
   function messageFor(result: ValidationResult): string {
+    // The backend writes these as long technical sentences; use the guide's wording.
+    if (result.rule === 'variety' && result.severity === 'soft') {
+      return t('validation.msgSameCategory')
+    }
+    // Unknown prices are not "$0" (guide: never display $0 for unknown costs).
+    if (result.rule === 'budget' && result.severity === 'data-gap') {
+      return t('validation.msgBudgetUnknownCosts')
+    }
     switch (result.message) {
       case 'leg_over_limit':
         return t('validation.msgLeg', { max: maxTravelMin })
@@ -46,7 +54,7 @@
   {#if allGood && showPass}
     <p class="line pass">
       <Icon name="check" size={16} />
-      <!-- Do not claim hours or budget fit when some of them could not be checked. -->
+      <!-- Only say "Everything fits" when nothing is unknown (guide: never hide uncertainty). -->
       <span>{gaps.length ? t('validation.passWithGaps') : t('validation.pass')}</span>
     </p>
   {/if}

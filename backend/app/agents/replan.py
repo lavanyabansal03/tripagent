@@ -8,6 +8,7 @@ The repair loop has its own caps (MAX_REPAIR_ITERATIONS, MAX_REPAIR_LLM_CALLS) a
 in PASS or INFEASIBLE.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -18,6 +19,9 @@ from uuid import uuid4
 from app.agents.apply_change import apply_change
 from app.agents.explainer import explain
 from app.agents.planner import repair_until_valid
+from app.tools.routes import add_route_legs
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -64,6 +68,30 @@ def _ms(start: float) -> int:
     return int((perf_counter() - start) * 1000)
 
 
+def _refresh_legs(
+    itinerary: dict[str, Any],
+    mode: Any,
+    changes: dict[str, list[str]],
+    route_legs: Callable[[dict[str, Any], Any], int],
+) -> None:
+    """Travel times between stops for the new version (stops and the mode may have changed).
+
+    Legs that touch a replaced, moved or added stop are marked changed, for the map. A
+    failure only means no route lines; the new version itself is still good.
+    """
+    try:
+        route_legs(itinerary, mode)
+    except Exception as error:
+        logger.warning("Travel times after the change failed: %s", error)
+        for day in itinerary.get("days", []):
+            day["legs"] = []
+        return
+    touched = {*changes["changed"], *changes["moved"], *changes["added"]}
+    for day in itinerary.get("days", []):
+        for leg in day.get("legs", []):
+            leg["changed"] = bool({leg["from_activity_id"], leg["to_activity_id"]} & touched)
+
+
 def replan(
     *,
     change_type: str,
@@ -78,6 +106,7 @@ def replan(
     choose: Callable[..., Any] | None = None,
     add_backups: Callable[[dict[str, Any], set[str] | None], int] | None = None,
     explain_fn: Callable[..., tuple[str, dict[str, str], str]] = explain,
+    route_legs: Callable[[dict[str, Any], Any], int] = add_route_legs,
 ) -> ReplanResult:
     timings: dict[str, int] = {}
     from_version = itinerary["version"]
@@ -117,6 +146,10 @@ def replan(
     timings["repair"] = _ms(started)
 
     changes = diff(itinerary, after)
+    started = perf_counter()
+    _refresh_legs(after, new_requirements.get("mode", "walking"), changes, route_legs)
+    timings["routes"] = _ms(started)
+
     started = perf_counter()
     trigger_text, reasons, explained_by = explain_fn(
         trigger, changes, itinerary, after, after["repairs"]

@@ -27,9 +27,9 @@ MAX_DISCOVERY_CALLS = 8
 ALLOWED_COUNTRIES = ["us"]
 # A2 famous places: the most names the LLM may suggest (each is one map lookup, or two).
 MAX_FAMOUS_PLACES = 12
-# Planner: most stops in one day for each pace (the 09:00-20:00 day still decides
-# whether they all fit).
-STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 6}
+# Planner: most stops in one day for each pace, counting the lunch stop (the 09:00-20:00
+# day still decides whether they all fit).
+STOPS_PER_DAY = {"relaxed": 3, "moderate": 4, "packed": 5}
 # Backup agent: backups kept per activity (FR-41 target 2) and searches per plan.
 BACKUPS_PER_ACTIVITY = 2
 MAX_BACKUP_SEARCHES = 15

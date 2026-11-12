@@ -48,12 +48,15 @@ def test_trip_create_clarify_plan_and_trace_follow_svelte_contract():
     assert itinerary.status_code == 200
     assert len(itinerary.json()["days"]) == 5
     assert itinerary.json()["days"][0]["activities"]
+    # Every day with 2+ stops has a travel leg between each pair (the app draws routes).
+    for day in itinerary.json()["days"]:
+        assert len(day["legs"]) == max(0, len(day["activities"]) - 1)
 
     trace = client.get(f"/api/trips/{trip_id}/trace")
     assert trace.status_code == 200
     events = trace.json()
     assert [event["node"] for event in events] == [
-        "read", "find", "planner", "backup", "validator", "save"
+        "read", "find", "planner", "backup", "routes", "validator", "save"
     ]
     assert next(event for event in events if event["node"] == "validator")["type"] == "validation"
     assert next(event for event in events if event["node"] == "backup")["type"] == "tool"

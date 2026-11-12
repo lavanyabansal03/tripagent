@@ -100,7 +100,7 @@ def test_pace_decides_how_many_stops_a_day_gets():
         itinerary, _ = plan_and_validate({**trip, "pace": pace}, many_places(20))
         counts[pace] = [len(day["activities"]) for day in itinerary["days"]]
 
-    assert counts == {"relaxed": [3, 3], "moderate": [4, 4], "packed": [6, 6]}
+    assert counts == {"relaxed": [3, 3], "moderate": [4, 4], "packed": [5, 5]}  # incl. lunch
 
 
 def test_stops_that_do_not_fit_the_day_do_not_fail_the_trip():

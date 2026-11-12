@@ -52,6 +52,13 @@
     ...new Set(days.flatMap((d) => d.activities.map((a) => a.place.experience_types[0]))),
   ])
   const changedLegs = $derived(days.flatMap((d) => d.legs.filter((l) => l.changed)))
+
+  // Geoapify's free plan requires a visible credit wherever its places are shown.
+  const usesGeoapify = $derived(
+    (itinerary?.days ?? []).some((d) =>
+      d.activities.some((a) => a.place.sources?.includes('geoapify')),
+    ),
+  )
 </script>
 
 <section class="map" aria-label={t('itinerary.mapTab')}>
@@ -131,7 +138,16 @@
     </svg>
   {/if}
 
-  <div class="legend" role="group" aria-label={t('a11y.mapLegend')}>
+  {#if usesGeoapify}
+    <p class="places-credit" data-testid="places-credit">
+      <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">{t('itinerary.poweredByGeoapify')}</a>
+      <span aria-hidden="true">·</span>
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">{t('itinerary.osmCredit')}</a>
+    </p>
+  {/if}
+
+  <!-- On the real map the legend sits above the Mapbox logo, which must stay visible. -->
+  <div class="legend" class:above-logo={Boolean(token)} role="group" aria-label={t('a11y.mapLegend')}>
     {#each categoriesUsed as category (category)}
       <span class="legend-item">
         <span class="swatch" style:background={categoryToken(category as string)}></span>
@@ -212,6 +228,26 @@
     border-radius: var(--radius-md);
     padding: var(--space-2);
     max-width: calc(100% - var(--space-4));
+  }
+  .legend.above-logo {
+    bottom: 36px;
+  }
+  .places-credit {
+    position: absolute;
+    left: var(--space-2);
+    top: var(--space-2);
+    margin: 0;
+    display: flex;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 2px var(--space-2);
+  }
+  .places-credit a {
+    color: inherit;
   }
   .legend-item {
     display: inline-flex;

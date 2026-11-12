@@ -65,19 +65,25 @@
 
   function addInterest() {
     const value = interestInput.trim().toLowerCase()
-    if (value && !interests.includes(value)) interests = [...interests, value]
+    if (value && !interests.includes(value)) {
+      interests = [...interests, value]
+      mark('interests')
+    }
     interestInput = ''
   }
 
   function addAvoid() {
     const value = avoidInput.trim().toLowerCase()
-    if (value && !avoid.includes(value)) avoid = [...avoid, value]
+    if (value && !avoid.includes(value)) {
+      avoid = [...avoid, value]
+      mark('avoid')
+    }
     avoidInput = ''
   }
 
   /** The budget as a number, or null when the box is empty or not a number. */
   function budgetValue(): number | null {
-    if (budget === null || String(budget).trim() === '') return null
+    if (budget === null || budget === undefined || String(budget).trim() === '') return null
     const value = Number(budget)
     return Number.isFinite(value) ? value : null
   }
@@ -186,7 +192,7 @@
       <div class="chips">
         {#each suggested as item (item)}
           <label class="chip" class:active={interests.includes(item)}>
-            <input type="checkbox" checked={interests.includes(item)} onchange={() => (interests = toggle(interests, item))} />
+            <input type="checkbox" checked={interests.includes(item)} onchange={() => { interests = toggle(interests, item); mark('interests') }} />
             {item}
           </label>
         {/each}
@@ -212,7 +218,7 @@
       <div class="chips">
         {#each ['culture', 'nightlife', 'shopping', 'food'] as item (item)}
           <label class="chip" class:active={avoid.includes(item)}>
-            <input type="checkbox" checked={avoid.includes(item)} onchange={() => (avoid = toggle(avoid, item))} />
+            <input type="checkbox" checked={avoid.includes(item)} onchange={() => { avoid = toggle(avoid, item); mark('avoid') }} />
             {item}
           </label>
         {/each}

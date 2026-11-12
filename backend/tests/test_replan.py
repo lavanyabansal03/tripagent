@@ -144,3 +144,44 @@ def test_diff_lists_added_and_removed():
     assert diff(before, after) == {
         "changed": [], "moved": [], "preserved": [], "added": ["b"], "removed": ["a"]
     }
+
+
+# --- travel times between stops are refreshed after a change -----------------------
+
+
+def test_new_version_has_fresh_travel_times_for_its_stops():
+    before = first_plan()
+    closed = activities(before)[1]
+
+    _, result = run("closure", {"activity_id": closed["id"], "day": 1}, before, "it closed")
+
+    day = result.itinerary["days"][0]
+    stops = [a["id"] for a in day["activities"]]
+    assert [(leg["from_activity_id"], leg["to_activity_id"]) for leg in day["legs"]] == list(
+        zip(stops, stops[1:])
+    )
+    # Legs that touch the replaced stop are marked changed; the others are not.
+    assert all(leg["changed"] == (closed["id"] in (leg["from_activity_id"], leg["to_activity_id"]))
+               for leg in day["legs"])
+    assert "routes" in result.timings
+
+
+def test_travel_times_use_the_new_mode():
+    _, result = run("transport", {"mode": "driving"})
+
+    assert {leg["mode"] for d in result.itinerary["days"] for leg in d["legs"]} == {"driving"}
+
+
+def test_a_failed_route_lookup_does_not_stop_the_change():
+    def broken(itinerary, mode):
+        raise RuntimeError("provider down")
+
+    itinerary = first_plan()
+    result = replan(
+        change_type="time", payload={"minutes": 30, "day": 1}, trigger="late",
+        trigger_id="c1", trip_id="t1", requirements=TRIP, itinerary=itinerary,
+        places=PLANNED + SPARE, versions=[1], route_legs=broken,
+    )
+
+    assert result.terminal == "PASS"
+    assert all(day["legs"] == [] for day in result.itinerary["days"])
