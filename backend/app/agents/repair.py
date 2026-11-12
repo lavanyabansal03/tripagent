@@ -14,11 +14,12 @@ travel time between stops, and over budget. Soft problems are not repaired;
 they are shown to the user (docs/03 section 5.3).
 """
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from typing import Any
 
-from app.config import REPAIR_OPTIONS_FOR_LLM
+from app.config import MAX_REASON_CHARS, REPAIR_OPTIONS_FOR_LLM
 from app.tools.base import LatLng
 from app.tools.mock_places import distance_km
 from app.validation.avoid import check_avoid_list
@@ -26,6 +27,8 @@ from app.validation.budget import check_budget
 from app.validation.opening_hours import check_opening_hours
 from app.validation.overlap import check_overlap
 from app.validation.travel_time import check_travel_time
+
+logger = logging.getLogger(__name__)
 
 PROTECTED_STATUSES = {"done", "locked", "cancelled"}
 
@@ -200,12 +203,13 @@ class _Repair:
             return options[0], "rule", None
         try:
             answer = self.choose(self.trip, activity, options, problem)
-        except Exception:
+        except Exception as error:  # the rule-based choice below still works
+            logger.warning("LLM repair choice failed (%s); using the first valid option", error)
             answer = None
         if answer is not None:
             index, why = answer
             if isinstance(index, int) and 0 <= index < len(options):
-                return options[index], "llm", (why or "").strip()[:200] or None
+                return options[index], "llm", (why or "").strip()[:MAX_REASON_CHARS] or None
         return options[0], "rule-fallback", None
 
     def _move_after(self, day, first, second) -> None:

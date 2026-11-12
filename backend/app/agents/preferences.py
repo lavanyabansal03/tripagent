@@ -1,11 +1,8 @@
-import time
 from typing import Literal
 
-from google import genai
-from google.genai import errors, types
 from pydantic import BaseModel, Field
 
-from app.config import GEMINI_TIMEOUT_SECONDS, LLM_MAX_TRIES, settings
+from app.agents.llm import ask_gemini
 
 
 class Preferences(BaseModel):
@@ -50,47 +47,5 @@ User trip description:
 
 
 def extract_preferences(trip_description: str) -> Preferences | None:
-    if not settings.GOOGLE_API_KEY:
-        return None
-
-    # Without a time limit a stuck request would hang trip creation forever.
-    client = genai.Client(
-        api_key=settings.GOOGLE_API_KEY,
-        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
-    )
-
-    prompt = build_prompt(trip_description)
-
-    config = {
-        "response_mime_type": "application/json",
-        "response_schema": Preferences,
-        "thinking_config": {
-            "thinking_level": "low",
-        },
-    }
-
-    response = call_with_retry(
-        lambda: client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt,
-            config=config,
-        )
-    )
-
-    return Preferences.model_validate_json(response.text)
-
-
-# Gemini answers 429 (too many requests) or 503 (busy) on the free tier.
-RETRY_CODES = {429, 503}
-MAX_TRIES = LLM_MAX_TRIES  # from config.py
-
-
-def call_with_retry(call, sleep=time.sleep):
-    """Run call(); on 429/503 wait 2, then 4 seconds and try again (MAX_TRIES in total)."""
-    for attempt in range(MAX_TRIES):
-        try:
-            return call()
-        except errors.APIError as error:
-            if error.code not in RETRY_CODES or attempt == MAX_TRIES - 1:
-                raise
-            sleep(2 ** (attempt + 1))
+    """Read the note with Gemini. None when there is no Gemini key."""
+    return ask_gemini(build_prompt(trip_description), Preferences)

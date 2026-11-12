@@ -10,25 +10,44 @@ Tests never reach a real LLM: tests/conftest.py removes both keys.
 """
 
 import logging
+import time
 from collections.abc import Callable
+from functools import partial
 from typing import TypeVar
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 from pydantic import BaseModel
 
 from app.agents.nvidia_llm import ask_nvidia_for_json
-from app.agents.preferences import call_with_retry
-from app.config import GEMINI_TIMEOUT_SECONDS, settings
+from app.config import GEMINI_TIMEOUT_SECONDS, LLM_MAX_TRIES, settings
 
 logger = logging.getLogger(__name__)
 
 Shape = TypeVar("Shape", bound=BaseModel)
+Answer = TypeVar("Answer")
+
+# Gemini answers 429 (too many requests) or 503 (busy) on the free tier.
+RETRY_CODES = {429, 503}
+MAX_TRIES = LLM_MAX_TRIES  # from config.py
+
+
+def call_with_retry(call, sleep=time.sleep):
+    """Run call(); on 429/503 wait 2, then 4 seconds and try again (MAX_TRIES in total)."""
+    for attempt in range(MAX_TRIES):
+        try:
+            return call()
+        except errors.APIError as error:
+            if error.code not in RETRY_CODES or attempt == MAX_TRIES - 1:
+                raise
+            sleep(2 ** (attempt + 1))
+    return None  # not reached: the loop returns or raises
 
 
 def ask_gemini(prompt: str, shape: type[Shape]) -> Shape | None:
     if not settings.GOOGLE_API_KEY:
         return None
+    # Without a time limit a stuck request would hang the request forever.
     client = genai.Client(
         api_key=settings.GOOGLE_API_KEY,
         http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
@@ -58,15 +77,24 @@ PROVIDERS: dict[str, Callable[[str, type[BaseModel]], BaseModel | None]] = {
 }
 
 
-def ask_json(prompt: str, shape: type[Shape]) -> Shape | None:
-    """Ask the primary LLM, then the backup. None if neither gives a valid answer."""
+def first_answer(attempts: dict[str, Callable[[], Answer | None]]) -> Answer | None:
+    """Run the primary LLM's attempt, then the backup's. None if neither answers.
+
+    `attempts` maps "gemini" and "nvidia" to a no-argument function. An attempt
+    that raises or returns None counts as "no answer".
+    """
     backup = "nvidia" if settings.LLM_PRIMARY == "gemini" else "gemini"
     for name in (settings.LLM_PRIMARY, backup):
         try:
-            answer = PROVIDERS[name](prompt, shape)
-        except Exception as error:
+            answer = attempts[name]()
+        except Exception as error:  # noqa: BLE001 - any failure moves on to the backup
             logger.warning("%s gave no usable answer (%s); trying the next LLM", name, error)
             continue
         if answer is not None:
             return answer
     return None
+
+
+def ask_json(prompt: str, shape: type[Shape]) -> Shape | None:
+    """Ask the primary LLM, then the backup. None if neither gives a valid answer."""
+    return first_answer({name: partial(ask, prompt, shape) for name, ask in PROVIDERS.items()})
