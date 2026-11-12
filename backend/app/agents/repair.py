@@ -58,10 +58,12 @@ def repair_itinerary(
     Without `choose`, or if it gives no valid answer, the first valid one is used.
     """
     repair = _Repair(trip, itinerary, places, choose)
+    repair.fix_unavailable_places()  # reported closed today (a change during the trip)
     repair.fix_closed_places()
     repair.fix_avoid_list()
     repair.fix_overlaps()
     repair.fix_travel_time()
+    repair.fix_day_end()  # pushed past the end of the day (for example after a delay)
     repair.fix_budget()
     return repair.changes
 
@@ -81,7 +83,24 @@ class _Repair:
             change["old_place_id"] for change in itinerary.get("repairs", [])
         }
 
-    # --- the five problems -------------------------------------------------
+    # --- the problems ------------------------------------------------------
+
+    def fix_unavailable_places(self) -> None:
+        for day, activity in self._editable():
+            if activity.get("unavailable"):
+                self._replace_or_remove(day, activity, "closure", "It is closed today.")
+
+    def fix_day_end(self) -> None:
+        """Remove activities that no longer end before the day's end (nothing to swap in)."""
+        for day, activity in self._editable():
+            start = datetime.fromisoformat(activity["start"])
+            end = datetime.fromisoformat(activity["end"])
+            if end.timetz().replace(tzinfo=None) > self._daily_end() or end.date() > start.date():
+                day["activities"].remove(activity)
+                self._record(
+                    activity, "removed", "day_end", "It no longer fits in the day.",
+                    activity["place"], None,
+                )
 
     def fix_closed_places(self) -> None:
         for day, activity in self._editable():
@@ -171,6 +190,7 @@ class _Repair:
                 "backups": [],  # the old place's backups no longer apply
             }
         )
+        activity.pop("unavailable", None)  # the new place is not the closed one
         self._record(activity, "replaced", rule, reason, old_place, replacement)
         self.changes[-1].update({"chosen_by": chosen_by, "why": why, "options": len(options)})
 

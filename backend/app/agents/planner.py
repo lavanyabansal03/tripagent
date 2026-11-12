@@ -236,7 +236,46 @@ def check_itinerary(
                 activity_ids=[],
             )
         )
+    validation.extend(_change_checks(trip, activities, trip_id=trip_id, version=version))
     return validation
+
+
+def _change_checks(
+    trip: dict[str, Any], activities: list[dict[str, Any]], *, trip_id: str, version: int
+) -> list[ValidationResult]:
+    """Checks that only fail after a change during the trip (L4); added only when failing.
+
+    - day_end: an activity now ends after the day's end (for example after "I'm late").
+    - closure: an activity's place was reported closed today.
+    """
+    daily_end = _as_time(trip.get("daily_end", "20:00"), time(20, 0))
+    late = [
+        a["id"]
+        for a in activities
+        if datetime.fromisoformat(a["end"]).time().replace(tzinfo=None) > daily_end
+        or datetime.fromisoformat(a["end"]).date() > datetime.fromisoformat(a["start"]).date()
+    ]
+    closed = [a["id"] for a in activities if a.get("unavailable")]
+    results = []
+    if late:
+        results.append(
+            ValidationResult(
+                id="day-end-check", trip_id=trip_id, version=version, rule="day_end",
+                passed=False, severity="hard",
+                message=f"{len(late)} activities now end after {daily_end:%H:%M}.",
+                activity_ids=late,
+            )
+        )
+    if closed:
+        results.append(
+            ValidationResult(
+                id="closure-check", trip_id=trip_id, version=version, rule="closure",
+                passed=False, severity="hard",
+                message=f"{len(closed)} activities are at places reported closed today.",
+                activity_ids=closed,
+            )
+        )
+    return results
 
 
 def plan_and_validate(
@@ -415,11 +454,42 @@ def build_plan_with_repairs(
     score stops improving twice in a row.
     """
     itinerary, first_checks = plan_and_validate(trip, places, version=version)
-    choose = _limited(choose, MAX_REPAIR_LLM_CALLS)
     if add_backups is not None:
         add_backups(itinerary, None)  # every activity
-    checks = first_checks
     itinerary["repairs"] = []
+    return (
+        itinerary,
+        *repair_until_valid(
+            trip, itinerary, places, version=version, choose=choose,
+            add_backups=add_backups, first_checks=first_checks,
+        ),
+    )
+
+
+def repair_until_valid(
+    trip: dict[str, Any],
+    itinerary: dict[str, Any],
+    places: list[dict[str, Any]],
+    *,
+    version: int,
+    choose: Callable[..., Any] | None = None,
+    add_backups: Callable[[dict[str, Any], set[str] | None], int] | None = None,
+    first_checks: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], int, str, str | None]:
+    """The L3 repair loop on an itinerary that already exists (new plan or a change).
+
+    Patches only broken activities, at most MAX_REPAIR_ITERATIONS times, and stops early
+    when a try changes nothing or the violation score stops improving twice.
+    Returns (checks, iterations, terminal, explanation); terminal is PASS or INFEASIBLE.
+    """
+    if first_checks is None:
+        results = check_itinerary(
+            trip, itinerary["days"], trip_id=itinerary["trip_id"], version=version
+        )
+        first_checks = [r.model_dump() for r in results]
+    choose = _limited(choose, MAX_REPAIR_LLM_CALLS)
+    checks = first_checks
+    itinerary.setdefault("repairs", [])
     best_score = violation_score(checks)
     stalls = 0
     iterations = 0
@@ -457,9 +527,9 @@ def build_plan_with_repairs(
     itinerary["score"] = 1.0 if all(c["passed"] for c in checks) else 0.5
     _attach_day_warnings(itinerary, checks)
     if not hard_failures(checks):
-        return itinerary, checks, iterations, "PASS", None
+        return checks, iterations, "PASS", None
     explanation = (
         f"Plan remains infeasible after {iterations} repair attempt(s): "
         + " ".join(c["message"] for c in hard_failures(checks))
     )
-    return itinerary, checks, iterations, "INFEASIBLE", explanation
+    return checks, iterations, "INFEASIBLE", explanation

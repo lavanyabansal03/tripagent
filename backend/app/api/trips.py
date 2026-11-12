@@ -433,6 +433,8 @@ def plan_trip(trip_id: str) -> PlanResponse:
     if succeeded:
         itinerary = result.get("itinerary", {})
         storage.save_itinerary(trip_id, itinerary)
+        # Candidates for repairs during the trip (changes, L4).
+        storage.save_places(trip_id, result.get("places", []))
         trip = trip.model_copy(
             update={
                 "status": "infeasible" if run_status == "infeasible" else "planned",
@@ -460,7 +462,10 @@ def get_trip_requirements(trip_id: str) -> TripRequirements:
 
 @router.get("/{trip_id}/itinerary")
 def get_itinerary(trip_id: str, version: int | None = None) -> dict[str, Any] | None:
-    _load(trip_id)
+    trip = Trip.model_validate(_load(trip_id)["trip"])
+    # Without a version: the CURRENT one (after Undo it is not the newest).
+    if version is None and trip.current_version:
+        version = trip.current_version
     return storage.get_itinerary(trip_id, version)
 
 
