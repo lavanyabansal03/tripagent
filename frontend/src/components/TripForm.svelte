@@ -21,7 +21,8 @@
   let destination = $state('Seattle')
   let startDate = $state(start)
   let endDate = $state(end)
-  let budget = $state<string>('500')
+  // A number input gives a number once the traveller types, and '' or null when emptied.
+  let budget = $state<string | number | null>('500')
   let budgetStrict = $state(true)
   let mode = $state<TripFormInput['mode']>('transit')
   let pace = $state<TripFormInput['pace']>('moderate')
@@ -69,12 +70,19 @@
     avoidInput = ''
   }
 
+  /** The budget as a number, or null when the box is empty or not a number. */
+  function budgetValue(): number | null {
+    if (budget === null || String(budget).trim() === '') return null
+    const value = Number(budget)
+    return Number.isFinite(value) ? value : null
+  }
+
   function submit() {
     onsubmit({
       destination,
       start_date: startDate,
       end_date: endDate,
-      budget: budget.trim() === '' ? null : Number(budget),
+      budget: budgetValue(),
       budget_strictness: budgetStrict ? 'strict' : 'flexible',
       mode,
       pace,
