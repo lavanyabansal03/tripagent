@@ -1,7 +1,7 @@
 """Shared LLM helper for the agents: ask a question, get a checked answer back.
 
 Every agent that uses an LLM calls `ask_json(prompt, Shape)`:
-- it tries LLM_PRIMARY first (Gemini by default), then the other one (ADR-009);
+- it tries LLM_PRIMARY first (NVIDIA by default), then the other one (ADR-009);
 - the answer must match the Pydantic `Shape`, or it counts as a failure;
 - it returns None when no LLM has a key or both fail, so every caller must
   have a plain-code fallback. The LLM proposes; code decides (CLAUDE.md).

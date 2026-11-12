@@ -40,13 +40,16 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.8-flash"
-    # Backup LLM (NVIDIA Nemotron) for when Gemini is busy or failing. Optional.
-    # Model names change; check build.nvidia.com and override in .env if needed.
+    # gemini-3.8-flash / 3.7-flash kept answering 503 "high demand" on the free
+    # tier (checked 2026-11-11); 3.5-flash answered every time, in about 1s.
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+    # NVIDIA Nemotron (build.nvidia.com). Model names change; check the site and
+    # override in .env if needed.
     NVIDIA_API_KEY: str = ""
     NVIDIA_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    # Which LLM to try first: "gemini" (default) or "nvidia". The other is the backup.
-    LLM_PRIMARY: Literal["gemini", "nvidia"] = "gemini"
+    # Which LLM to try first: "nvidia" (default, the more reliable one) or
+    # "gemini". The other is the backup (ADR-009).
+    LLM_PRIMARY: Literal["gemini", "nvidia"] = "nvidia"
     MAPBOX_SECRET_TOKEN: str = ""
     # Place search (free plan, no card). Used only when DEMO_MODE is false.
     GEOAPIFY_API_KEY: str = ""
